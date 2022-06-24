@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Metal shaders used for this sample.
+The Metal shaders used for this sample.
 */
 #include "ShaderTypes.h"
 
@@ -13,8 +13,10 @@ using namespace metal;
 
 using namespace raytracing;
 
-constant unsigned int resourcesStride  [[function_constant(0)]];
-constant bool useIntersectionFunctions [[function_constant(1)]];
+constant unsigned int resourcesStride   [[function_constant(0)]];
+constant bool useIntersectionFunctions  [[function_constant(1)]];
+constant bool usePerPrimitiveData       [[function_constant(2)]];
+constant bool useResourcesBuffer = !usePerPrimitiveData;
 
 constant unsigned int primes[] = {
     2,   3,  5,  7,
@@ -26,11 +28,11 @@ constant unsigned int primes[] = {
 };
 
 // Returns the i'th element of the Halton sequence using the d'th prime number as a
-// base. The Halton sequence is a "low discrepency" sequence: the values appear
-// random but are more evenly distributed than a purely random sequence. Each random
-// value used to render the image should use a different independent dimension 'd',
-// and each sample (frame) should use a different index 'i'. To decorrelate each
-// pixel, you can apply a random offset to 'i'.
+// base. The Halton sequence is a low discrepency sequence: the values appear
+// random, but are more evenly distributed than a purely random sequence. Each random
+// value used to render the image uses a different independent dimension, `d`,
+// and each sample (frame) uses a different index `i`. To decorrelate each pixel,
+// you can apply a random offset to `i`.
 float halton(unsigned int i, unsigned int d) {
     unsigned int b = primes[d];
 
@@ -48,21 +50,37 @@ float halton(unsigned int i, unsigned int d) {
     return r;
 }
 
-// Interpolates vertex attribute of an arbitrary type across the surface of a triangle
+// Interpolates the vertex attribute of an arbitrary type across the surface of a triangle
 // given the barycentric coordinates and triangle index in an intersection structure.
-template<typename T>
-inline T interpolateVertexAttribute(device T *attributes, unsigned int primitiveIndex, float2 uv) {
+template<typename T, typename IndexType>
+inline T interpolateVertexAttribute(device T *attributes,
+                                    IndexType i0,
+                                    IndexType i1,
+                                    IndexType i2,
+                                    float2 uv) {
     // Look up value for each vertex.
-    T T0 = attributes[primitiveIndex * 3 + 0];
-    T T1 = attributes[primitiveIndex * 3 + 1];
-    T T2 = attributes[primitiveIndex * 3 + 2];
+    const T T0 = attributes[i0];
+    const T T1 = attributes[i1];
+    const T T2 = attributes[i2];
 
-    // Compute sum of vertex attributes weighted by barycentric coordinates.
-    // Barycentric coordinates sum to one.
+    // Compute the sum of the vertex attributes weighted by the barycentric coordinates.
+    // The barycentric coordinates sum to one.
     return (1.0f - uv.x - uv.y) * T0 + uv.x * T1 + uv.y * T2;
 }
 
-// Uses the inversion method to map two uniformly random numbers to a three dimensional
+template<typename T>
+inline T interpolateVertexAttribute(thread T *attributes, float2 uv) {
+    // Look up the value for each vertex.
+    const T T0 = attributes[0];
+    const T T1 = attributes[1];
+    const T T2 = attributes[2];
+
+    // Compute the sum of the vertex attributes weighted by the barycentric coordinates.
+    // The barycentric coordinates sum to one.
+    return (1.0f - uv.x - uv.y) * T0 + uv.x * T1 + uv.y * T2;
+}
+
+// Uses the inversion method to map two uniformly random numbers to a 3D
 // unit hemisphere, where the probability of a given sample is proportional to the cosine
 // of the angle between the sample direction and the "up" direction (0, 1, 0).
 inline float3 sampleCosineWeightedHemisphere(float2 u) {
@@ -77,12 +95,12 @@ inline float3 sampleCosineWeightedHemisphere(float2 u) {
     return float3(sin_theta * cos_phi, cos_theta, sin_theta * sin_phi);
 }
 
-// Maps two uniformly random numbers to the surface of a two-dimensional area light
-// source and returns the direction to this point, the amount of light which travels
+// Maps two uniformly random numbers to the surface of a 2D area light
+// source and returns the direction to this point, the amount of light that travels
 // between the intersection point and the sample point on the light source, as well
 // as the distance between these two points.
 
-inline void sampleAreaLight(device AreaLight & light,
+inline void sampleAreaLight(constant AreaLight & light,
                             float2 u,
                             float3 position,
                             thread float3 & lightDirection,
@@ -92,12 +110,12 @@ inline void sampleAreaLight(device AreaLight & light,
     // Map to -1..1
     u = u * 2.0f - 1.0f;
 
-    // Transform into light's coordinate system.
+    // Transform into the light's coordinate system.
     float3 samplePosition = light.position +
                             light.right * u.x +
                             light.up * u.y;
 
-    // Compute vector from sample point on light source to intersection point.
+    // Compute the vector from sample point on  the light source to intersection point.
     lightDirection = samplePosition - position;
 
     lightDistance = length(lightDirection);
@@ -113,8 +131,8 @@ inline void sampleAreaLight(device AreaLight & light,
     // Light falls off with the inverse square of the distance to the intersection point.
     lightColor *= (inverseLightDistance * inverseLightDistance);
 
-    // Light also falls off with the cosine of angle between the intersection point and
-    // the light source.
+    // Light also falls off with the cosine of the angle between the intersection point
+    // and the light source.
     lightColor *= saturate(dot(-lightDirection, light.forward));
 }
 
@@ -124,11 +142,11 @@ inline float3 alignHemisphereWithNormal(float3 sample, float3 normal) {
     // Set the "up" vector to the normal
     float3 up = normal;
 
-    // Find an arbitrary direction perpendicular to the normal. This will become the
+    // Find an arbitrary direction perpendicular to the normal, which becomes the
     // "right" vector.
     float3 right = normalize(cross(normal, float3(0.0072f, 1.0f, 0.0034f)));
 
-    // Find a third vector perpendicular to the previous two. This will be the
+    // Find a third vector perpendicular to the previous two, which becomes the
     // "forward" vector.
     float3 forward = cross(right, up);
 
@@ -137,7 +155,7 @@ inline float3 alignHemisphereWithNormal(float3 sample, float3 normal) {
     return sample.x * right + sample.y * up + sample.z * forward;
 }
 
-// Return type for a bounding box intersection function.
+// Return the type for a bounding box intersection function.
 struct BoundingBoxIntersection {
     bool accept    [[accept_intersection]]; // Whether to accept or reject the intersection.
     float distance [[distance]];            // Distance from the ray origin to the intersection point.
@@ -145,6 +163,7 @@ struct BoundingBoxIntersection {
 
 // Resources for a piece of triangle geometry.
 struct TriangleResources {
+    device uint16_t *indices;
     device float3 *vertexNormals;
     device float3 *vertexColors;
 };
@@ -171,32 +190,44 @@ struct SphereResources {
 
  The arguments to the intersection function contain information about the ray, primitive to be
  tested, and so on. The ray intersector provides this datas when it calls the intersection function.
- Metal provides other built-in arguments but this sample doesn't use them.
+ Metal provides other built-in arguments, but this sample doesn't use them.
  */
 [[intersection(bounding_box, triangle_data, instancing)]]
 BoundingBoxIntersection sphereIntersectionFunction(// Ray parameters passed to the ray intersector below
-                                                   float3 origin               [[origin]],
-                                                   float3 direction            [[direction]],
-                                                   float minDistance           [[min_distance]],
-                                                   float maxDistance           [[max_distance]],
+                                                   float3 origin                        [[origin]],
+                                                   float3 direction                     [[direction]],
+                                                   float minDistance                    [[min_distance]],
+                                                   float maxDistance                    [[max_distance]],
                                                    // Information about the primitive.
-                                                   unsigned int primitiveIndex [[primitive_id]],
-                                                   unsigned int geometryIndex  [[geometry_intersection_function_table_offset]],
+                                                   unsigned int primitiveIndex          [[primitive_id]],
+                                                   unsigned int geometryIndex           [[geometry_intersection_function_table_offset]],
                                                    // Custom resources bound to the intersection function table.
-                                                   device void *resources      [[buffer(0)]])
+                                                   device void *resources               [[buffer(0), function_constant(useResourcesBuffer)]]
+#if SUPPORTS_METAL_3
+                                                   ,const device void* perPrimitiveData [[primitive_data]]
+#endif
+                                                   )
 {
+    Sphere sphere;
+#if SUPPORTS_METAL_3
     // Look up the resources for this piece of sphere geometry.
-    device SphereResources & sphereResources = *(device SphereResources *)((device char *)resources + resourcesStride * geometryIndex);
-
-    // Get the actual sphere enclosed in this bounding box.
-    device Sphere & sphere = sphereResources.spheres[primitiveIndex];
+    if (usePerPrimitiveData) {
+        // Per-primitive data points to data from the specified buffer as was configured in the MTLAccelerationStructureBoundingBoxGeometryDescriptor.
+        sphere = *(const device Sphere*)perPrimitiveData;
+    } else
+#endif
+    {
+        device SphereResources& sphereResources = *(device SphereResources *)((device char *)resources + resourcesStride * geometryIndex);
+        // Get the actual sphere enclosed in this bounding box.
+        sphere = sphereResources.spheres[primitiveIndex];
+    }
 
     // Check for intersection between the ray and sphere mathematically.
     float3 oc = origin - sphere.origin;
 
     float a = dot(direction, direction);
     float b = 2 * dot(oc, direction);
-    float c = dot(oc, oc) - sphere.radius * sphere.radius;
+    float c = dot(oc, oc) - sphere.radiusSquared;
 
     float disc = b * b - 4 * a * c;
 
@@ -230,18 +261,20 @@ float3 transformDirection(float3 p, float4x4 transform) {
 }
 
 // Main ray tracing kernel.
-kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
-                             constant Uniforms & uniforms,
-                             texture2d<unsigned int> randomTex,
-                             texture2d<float> prevTex,
-                             texture2d<float, access::write> dstTex,
-                             device void *resources,
-                             device MTLAccelerationStructureInstanceDescriptor *instances,
-                             device AreaLight *areaLights,
-                             instance_acceleration_structure accelerationStructure,
-                             intersection_function_table<triangle_data, instancing> intersectionFunctionTable)
+kernel void raytracingKernel(
+     uint2                                                  tid                       [[thread_position_in_grid]],
+     constant Uniforms &                                    uniforms                  [[buffer(0)]],
+     texture2d<unsigned int>                                randomTex                 [[texture(0)]],
+     texture2d<float>                                       prevTex                   [[texture(1)]],
+     texture2d<float, access::write>                        dstTex                    [[texture(2)]],
+     device void                                           *resources                 [[buffer(1), function_constant(useResourcesBuffer)]],
+     constant MTLAccelerationStructureInstanceDescriptor   *instances                 [[buffer(2)]],
+     constant AreaLight                                    *areaLights                [[buffer(3)]],
+     instance_acceleration_structure                        accelerationStructure     [[buffer(4)]],
+     intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]]
+)
 {
-    // The sample aligns the thread count to the threadgroup size. which means the thread count
+    // The sample aligns the thread count to the threadgroup size, which means the thread count
     // may be different than the bounds of the texture. Test to make sure this thread
     // is referencing a pixel within the bounds of the texture.
     if (tid.x < uniforms.width && tid.y < uniforms.height) {
@@ -280,7 +313,6 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
         // Start with a fully white color. The kernel scales the light each time the
         // ray bounces off of a surface, based on how much of each light component
         // the surface absorbs.
-
         float3 color = float3(1.0f, 1.0f, 1.0f);
 
         float3 accumulatedColor = float3(0.0f, 0.0f, 0.0f);
@@ -289,7 +321,7 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
         intersector<triangle_data, instancing> i;
 
         // If the sample isn't using intersection functions, provide some hints to Metal for
-        // better performance
+        // better performance.
         if (!useIntersectionFunctions) {
             i.assume_geometry_type(geometry_type::triangle);
             i.force_opacity(forced_opacity::opaque);
@@ -297,8 +329,8 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
 
         typename intersector<triangle_data, instancing>::result_type intersection;
 
-        // Simulate up to 3 ray bounces. Each bounce will propagate light backwards along the
-        // ray's path towards the camera.
+        // Simulate up to three ray bounces. Each bounce propagates light backward along the
+        // ray's path toward the camera.
         for (int bounce = 0; bounce < 3; bounce++) {
             // Get the closest intersection, not the first intersection. This is the default, but
             // the sample adjusts this property below when it casts shadow rays.
@@ -320,7 +352,7 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
             // Look up the mask for this instance, which indicates what type of geometry the ray hit.
             unsigned int mask = instances[instanceIndex].mask;
 
-            // If the ray hit a light source, set the color to white and stop immediately.
+            // If the ray hit a light source, set the color to white, and stop immediately.
             if (mask == GEOMETRY_MASK_LIGHT) {
                 accumulatedColor = float3(1.0f, 1.0f, 1.0f);
                 break;
@@ -333,7 +365,7 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
                 for (int row = 0; row < 3; row++)
                     objectToWorldSpaceTransform[column][row] = instances[instanceIndex].transformationMatrix[column][row];
 
-            // Compute intersection point in world space.
+            // Compute the intersection point in world space.
             float3 worldSpaceIntersectionPoint = ray.origin + ray.direction * intersection.distance;
 
             unsigned primitiveIndex = intersection.primitive_id;
@@ -344,23 +376,50 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
             float3 surfaceColor = 0.0f;
 
             if (mask & GEOMETRY_MASK_TRIANGLE) {
-                // The ray hit a triangle. Look up the corresponding geometry's normal and UV buffers.
-                device TriangleResources & triangleResources = *(device TriangleResources *)((device char *)resources + resourcesStride * geometryIndex);
+                Triangle triangle;
+                
+                float3 objectSpaceSurfaceNormal;
+#if SUPPORTS_METAL_3
+                if (usePerPrimitiveData) {
+                    // Per-primitive data points to data from the specified buffer as was configured in the MTLAccelerationStructureTriangleGeometryDescriptor.
+                    triangle = *(const device Triangle*)intersection.primitive_data;
+                } else
+#endif
+                {
+                    // The ray hit a triangle. Look up the corresponding geometry's normal and UV buffers.
+                    device TriangleResources & triangleResources = *(device TriangleResources *)((device char *)resources + resourcesStride * geometryIndex);
 
+                    triangle.normals[0] =  triangleResources.vertexNormals[triangleResources.indices[primitiveIndex * 3 + 0]];
+                    triangle.normals[1] =  triangleResources.vertexNormals[triangleResources.indices[primitiveIndex * 3 + 1]];
+                    triangle.normals[2] =  triangleResources.vertexNormals[triangleResources.indices[primitiveIndex * 3 + 2]];
+
+                    triangle.colors[0] =  triangleResources.vertexColors[triangleResources.indices[primitiveIndex * 3 + 0]];
+                    triangle.colors[1] =  triangleResources.vertexColors[triangleResources.indices[primitiveIndex * 3 + 1]];
+                    triangle.colors[2] =  triangleResources.vertexColors[triangleResources.indices[primitiveIndex * 3 + 2]];
+                }
+                
                 // Interpolate the vertex normal at the intersection point.
-                float3 objectSpaceSurfaceNormal = interpolateVertexAttribute(triangleResources.vertexNormals, primitiveIndex, barycentric_coords);
+                objectSpaceSurfaceNormal = interpolateVertexAttribute(triangle.normals, barycentric_coords);
+
+                // Interpolate the vertex color at the intersection point.
+                surfaceColor = interpolateVertexAttribute(triangle.colors, barycentric_coords);
 
                 // Transform the normal from object to world space.
                 worldSpaceSurfaceNormal = normalize(transformDirection(objectSpaceSurfaceNormal, objectToWorldSpaceTransform));
-
-                // Interpolate the vertex color at the intersection point.
-                surfaceColor = interpolateVertexAttribute(triangleResources.vertexColors, primitiveIndex, barycentric_coords);
             }
             else if (mask & GEOMETRY_MASK_SPHERE) {
-                // The ray hit a sphere. Look up the corresponding sphere buffer.
-                device SphereResources & sphereResources = *(device SphereResources *)((device char *)resources +resourcesStride * geometryIndex);
-
-                device Sphere & sphere = sphereResources.spheres[primitiveIndex];
+                Sphere sphere;
+#if SUPPORTS_METAL_3
+                if (usePerPrimitiveData) {
+                    // Per-primitive data points to data from the specified buffer as was configured in the MTLAccelerationStructureBoundingBoxGeometryDescriptor.
+                    sphere = *(const device Sphere*)intersection.primitive_data;
+                } else
+#endif
+                {
+                    // The ray hit a sphere. Look up the corresponding sphere buffer.
+                    device SphereResources & sphereResources = *(device SphereResources *)((device char *)resources + resourcesStride * geometryIndex);
+                    sphere = sphereResources.spheres[primitiveIndex];
+                }
 
                 // Transform the sphere's origin from object space to world space.
                 float3 worldSpaceOrigin = transformPoint(sphere.origin, objectToWorldSpaceTransform);
@@ -368,7 +427,7 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
                 // Compute the surface normal directly in world space.
                 worldSpaceSurfaceNormal = normalize(worldSpaceIntersectionPoint - worldSpaceOrigin);
 
-                // The sphere is a uniform color so no need to interpolate the color across the surface.
+                // The sphere is a uniform color, so you don't need to interpolate the color across the surface.
                 surfaceColor = sphere.color;
             }
 
@@ -393,23 +452,22 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
             lightColor *= saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
 
             // Scale the light color by the number of lights to compensate for the fact that
-            // the sample only samples one light source at random.
+            // the sample samples only one light source at random.
             lightColor *= uniforms.lightCount;
 
-            // Scale the ray color by the color of the surface. This simulates light being absorbed into
-            // the surface.
+            // Scale the ray color by the color of the surface to simulate the surface absorbing light.
             color *= surfaceColor;
 
-            // Compute the shadow ray. The shadow ray checks if the sample position on the
+            // Compute the shadow ray. The shadow ray checks whether the sample position on the
             // light source is visible from the current intersection point.
-            // If it is, the lighting contribution is added to the output image.
+            // If it is, the kernel adds lighting to the output image.
             struct ray shadowRay;
 
             // Add a small offset to the intersection point to avoid intersecting the same
             // triangle again.
             shadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
 
-            // Travel towards the light source.
+            // Travel toward the light source.
             shadowRay.direction = worldSpaceLightDirection;
 
             // Don't overshoot the light source.
@@ -429,14 +487,13 @@ kernel void raytracingKernel(uint2 tid [[thread_position_in_grid]],
             if (intersection.type == intersection_type::none)
                 accumulatedColor += lightColor * color;
 
-            // Next choose a random direction to continue the path of the ray. This will
-            // cause light to bounce between surfaces. The sample could apply a fair bit of math
-            // to compute the fraction of light reflected by the current intersection point to the
-            // previous point from the next point. However, by choosing a random direction with
-            // probability proportional to the cosine (dot product) of the angle between the
-            // sample direction and surface normal, the math entirely cancels out except for
-            // multiplying by the surface color. This sampling strategy also reduces the amount
-            // of noise in the output image.
+            // Choose a random direction to continue the path of the ray. This causes light to
+            // bounce between surfaces. An app might evaluate a more complicated equation to
+            // calculate the amount of light that reflects between intersection points.  However,
+            // all the math in this kernel cancels out because this app assumes a simple diffuse
+            // BRDF and samples the rays with a cosine distribution over the hemisphere (importance
+            // sampling). This requires that the kernel only multiply the colors together. This
+            // sampling strategy also reduces the amount of noise in the output image.
             r = float2(halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 3),
                        halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 4));
 
@@ -475,7 +532,7 @@ struct CopyVertexOut {
     float2 uv;
 };
 
-// Simple vertex shader which passes through NDC quad positions.
+// Simple vertex shader that passes through NDC quad positions.
 vertex CopyVertexOut copyVertex(unsigned short vid [[vertex_id]]) {
     float2 position = quadVertices[vid];
 
@@ -487,7 +544,7 @@ vertex CopyVertexOut copyVertex(unsigned short vid [[vertex_id]]) {
     return out;
 }
 
-// Simple fragment shader which copies a texture and applies a simple tonemapping function.
+// Simple fragment shader that copies a texture and applies a simple tonemapping function.
 fragment float4 copyFragment(CopyVertexOut in [[stage_in]],
                              texture2d<float> tex)
 {
@@ -495,7 +552,7 @@ fragment float4 copyFragment(CopyVertexOut in [[stage_in]],
 
     float3 color = tex.sample(sam, in.uv).xyz;
 
-    // Apply a very simple tonemapping function to reduce the dynamic range of the
+    // Apply a simple tonemapping function to reduce the dynamic range of the
     // input image into a range which the screen can display.
     color = color / (1.0f + color);
 

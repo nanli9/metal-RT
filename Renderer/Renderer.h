@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Header for the renderer class that performs Metal setup and per-frame rendering.
+The header for the renderer class that performs Metal setup and per-frame rendering.
 */
 
 #import <Metal/Metal.h>

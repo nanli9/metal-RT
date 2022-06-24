@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Header for the cross-platform view controller.
+The header for the cross-platform view controller.
 */
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>

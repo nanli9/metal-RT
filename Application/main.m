@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Main app entry point.
+The main app entry point.
 */
 
 #import <TargetConditionals.h>

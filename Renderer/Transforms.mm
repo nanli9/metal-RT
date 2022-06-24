@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Implementation of simple matrix math functions
+The implementation of simple matrix math functions.
 */
 #import "Transforms.h"
 

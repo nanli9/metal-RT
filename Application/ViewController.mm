@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Implementation of the cross-platform view controller.
+The implementation of the cross-platform view controller.
 */
 #import "ViewController.h"
 #import "Renderer.h"

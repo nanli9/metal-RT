@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Implementation of the renderer class that performs Metal setup and per-frame rendering.
+The implementation of the renderer class that performs Metal setup and per-frame rendering.
 */
 
 #import <simd/simd.h>
@@ -50,6 +50,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     NSUInteger _resourcesStride;
     bool _useIntersectionFunctions;
+    bool _usePerPrimitiveData;
 }
 
 - (nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device
@@ -74,7 +75,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     return self;
 }
 
-// Initialize Metal shader library and command queue.
+// Initialize the Metal shader library and command queue.
 - (void)loadMetal
 {
     _library = [_device newDefaultLibrary];
@@ -107,55 +108,55 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // Set to YES to allow the compiler to make certain optimizations.
     descriptor.threadGroupSizeIsMultipleOfThreadExecutionWidth = YES;
 
-    NSError *error = nil;
+    NSError *error;
 
     // Create the compute pipeline state.
     id <MTLComputePipelineState> pipeline = [_device newComputePipelineStateWithDescriptor:descriptor
                                                                                    options:0
                                                                                 reflection:nil
                                                                                      error:&error];
-
-    if (!pipeline) {
-        NSLog(@"Failed to create %@ pipeline state: %@", function.name, error.localizedDescription);
-
-        return nil;
-    }
+    NSAssert(pipeline, @"Failed to create %@ pipeline state: %@", function.name, error);
 
     return pipeline;
 }
 
-// Create a compute function and specialize its function constants.
+// Create a compute function, and specialize its function constants.
 - (id <MTLFunction>)specializedFunctionWithName:(NSString *)name {
     // Fill out a dictionary of function constant values.
     MTLFunctionConstantValues *constants = [[MTLFunctionConstantValues alloc] init];
 
     // The first constant is the stride between entries in the resource buffer. The sample
-    // uses this to allow intersection functions to look up any resources they use.
+    // uses this stride to allow intersection functions to look up any resources they use.
     uint32_t resourcesStride = (uint32_t)_resourcesStride;
     [constants setConstantValue:&resourcesStride type:MTLDataTypeUInt atIndex:0];
 
     // The second constant turns the use of intersection functions on and off.
     [constants setConstantValue:&_useIntersectionFunctions type:MTLDataTypeBool atIndex:1];
 
-    NSError *error = nil;
+    // The third constant turns the use of intersection functions on and off.
+    [constants setConstantValue:&_usePerPrimitiveData type:MTLDataTypeBool atIndex:2];
 
-    // Finally, load the function from the Metal library.
+    NSError *error;
+
+    // Load the function from the Metal library.
     id <MTLFunction> function = [_library newFunctionWithName:name constantValues:constants error:&error];
 
-    if (!function) {
-        NSLog(@"Failed to create function %@: %@", name, error.localizedDescription);
-        return nil;
-    }
+    NSAssert(function, @"Failed to create function %@: %@", name, error, function.name, error);
 
     return function;
 }
 
-// Create pipeline states
+// Create pipeline states.
 - (void)createPipelines
 {
     _useIntersectionFunctions = false;
+#if SUPPORTS_METAL_3
+    _usePerPrimitiveData = true;
+#else
+    _usePerPrimitiveData = false;
+#endif
 
-    // Check if any scene geometry has an intersection function
+    // Check if any scene geometry has an intersection function.
     for (Geometry *geometry in _scene.geometries) {
         if (geometry.intersectionFunctionName) {
             _useIntersectionFunctions = true;
@@ -163,10 +164,10 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         }
     }
 
-    // Maps intersection function names to actual MTLFunctions
+    // Maps intersection function names to actual MTLFunctions.
     NSMutableDictionary <NSString *, id <MTLFunction>> *intersectionFunctions = [NSMutableDictionary dictionary];
 
-    // First, load all the intersection functions since the sample needs them to create the final
+    // First, load all the intersection functions because the sample needs them to create the final
     // ray-tracing compute pipeline state.
     for (Geometry *geometry in _scene.geometries) {
         // Skip if the geometry doesn't have an intersection function or if the app already loaded
@@ -174,20 +175,20 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         if (!geometry.intersectionFunctionName || [intersectionFunctions objectForKey:geometry.intersectionFunctionName])
             continue;
 
-        // Specialize function constants used by the intersection function.
+        // Specialize function constants the intersection function uses.
         id <MTLFunction> intersectionFunction = [self specializedFunctionWithName:geometry.intersectionFunctionName];
 
-        // Add the function to the dictionary
+        // Add the function to the dictionary.
         intersectionFunctions[geometry.intersectionFunctionName] = intersectionFunction;
     }
 
     id <MTLFunction> raytracingFunction = [self specializedFunctionWithName:@"raytracingKernel"];
 
-    // Create the compute pipeline state which does all of the ray tracing.
+    // Create the compute pipeline state, which does all the ray tracing.
     _raytracingPipeline = [self newComputePipelineStateWithFunction:raytracingFunction
                                                     linkedFunctions:[intersectionFunctions allValues]];
 
-    // Create the intersection function table
+    // Create the intersection function table.
     if (_useIntersectionFunctions) {
         MTLIntersectionFunctionTableDescriptor *intersectionFunctionTableDescriptor = [[MTLIntersectionFunctionTableDescriptor alloc] init];
 
@@ -196,12 +197,14 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         // Create a table large enough to hold all of the intersection functions. Metal
         // links intersection functions into the compute pipeline state, potentially with
         // a different address for each compute pipeline. Therefore, the intersection
-        // function table is specific to the compute pipeline state that created it and you
-        // can only use it with that pipeline.
+        // function table is specific to the compute pipeline state that created it, and you
+        // can use it with only that pipeline.
         _intersectionFunctionTable = [_raytracingPipeline newIntersectionFunctionTableWithDescriptor:intersectionFunctionTableDescriptor];
 
-        // Bind the buffer used to pass resources to the intersection functions.
-        [_intersectionFunctionTable setBuffer:_resourceBuffer offset:0 atIndex:0];
+        if (!_usePerPrimitiveData) {
+            // Bind the buffer used to pass resources to the intersection functions.
+            [_intersectionFunctionTable setBuffer:_resourceBuffer offset:0 atIndex:0];
+        }
 
         // Map each piece of scene geometry to its intersection function.
         for (NSUInteger geometryIndex = 0; geometryIndex < _scene.geometries.count; geometryIndex++) {
@@ -215,14 +218,14 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
                 // it is linked with.
                 id <MTLFunctionHandle> handle = [_raytracingPipeline functionHandleWithFunction:intersectionFunction];
 
-                // Insert the handle into the intersection function table. This ultimately maps the
+                // Insert the handle into the intersection function table, which ultimately maps the
                 // geometry's index to its intersection function.
                 [_intersectionFunctionTable setFunction:handle atIndex:geometryIndex];
             }
         }
     }
 
-    // Create a render pipeline state which copies the rendered scene into the MTKView and
+    // Create a render pipeline state that copies the rendered scene into the MTKView and
     // performs simple tone mapping.
     MTLRenderPipelineDescriptor *renderDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
 
@@ -231,16 +234,14 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     renderDescriptor.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA16Float;
 
-    NSError *error = nil;
+    NSError *error;
 
-    _copyPipeline = [_device newRenderPipelineStateWithDescriptor:renderDescriptor error:nil];
+    _copyPipeline = [_device newRenderPipelineStateWithDescriptor:renderDescriptor error:&error];
 
-    if (!_copyPipeline)
-        NSLog(@"Failed to create the copy pipeline state: %@", error.localizedDescription);
+    NSAssert(_copyPipeline, @"Failed to create the copy pipeline state %@: %@", raytracingFunction.name, error);
 }
 
-// Create an argument encoder which encodes references to a set of resources
-// into a buffer.
+// Create an argument encoder that encodes references to a set of resources into a buffer.
 - (id <MTLArgumentEncoder>)newArgumentEncoderForResources:(NSArray <id <MTLResource>> *)resources {
     NSMutableArray *arguments = [NSMutableArray array];
 
@@ -266,8 +267,8 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 }
 
 - (void)createBuffers {
-    // The uniform buffer contains a few small values which change from frame to frame. The
-    // sample can have up to 3 frames in flight at once, so allocate a range of the buffer
+    // The uniform buffer contains a few small values, which change from frame to frame. The
+    // sample can have up to three frames in flight at the same time, so allocate a range of the buffer
     // for each frame. The GPU reads from one chunk while the CPU writes to the next chunk.
     // Align the chunks to 256 bytes on macOS and 16 bytes on iOS.
     NSUInteger uniformBufferSize = alignedUniformsSize * maxFramesInFlight;
@@ -282,13 +283,18 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     _resourcesStride = 0;
 
     // Each intersection function has its own set of resources. Determine the maximum size over all
-    // intersection functions. This will become the stride used by intersection functions to find
+    // intersection functions. This size becomes the stride that intersection functions use to find
     // the starting address for their resources.
     for (Geometry *geometry in _scene.geometries) {
+#if SUPPORTS_METAL_3
+        if (geometry.resources.count * sizeof(MTLGPUHandle) > _resourcesStride)
+            _resourcesStride = geometry.resources.count * sizeof(MTLGPUHandle);
+#else
         id <MTLArgumentEncoder> encoder = [self newArgumentEncoderForResources:geometry.resources];
 
         if (encoder.encodedLength > _resourcesStride)
             _resourcesStride = encoder.encodedLength;
+#endif
     }
 
     // Create the resource buffer.
@@ -297,7 +303,24 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     for (NSUInteger geometryIndex = 0; geometryIndex < _scene.geometries.count; geometryIndex++) {
         Geometry *geometry = _scene.geometries[geometryIndex];
 
-        // Create an argument encoder for this geometry's intersection function's resources
+#if SUPPORTS_METAL_3
+        // Retrieve the list of arguments for this geometry's intersection function's resources.
+        NSArray<id <MTLResource>>* resources = [geometry resources];
+
+        // Get a pointer to the resource buffer.
+        // Resources can return a gpuAddress or gpuResourceID, which are both the same size as a uint64_t.
+        uint64_t *resourceHandles = (MTLGPUHandle*)((uint8_t*)_resourceBuffer.contents + _resourcesStride * geometryIndex);
+
+        // Encode the arguments into the resource buffer.
+        for (NSUInteger argumentIndex = 0; argumentIndex < resources.count; argumentIndex++) {
+            id <MTLResource> resource = resources[argumentIndex];
+            if ([resource conformsToProtocol:@protocol(MTLBuffer)])
+                resourceHandles[argumentIndex] = [(id <MTLBuffer>)resource gpuAddress];
+            else if ([resource conformsToProtocol:@protocol(MTLTexture)])
+                *((MTLResourceID*)(resourceHandles + argumentIndex)) = [(id <MTLTexture>)resource gpuResourceID];
+        }
+#else
+        // Create an argument encoder for this geometry's intersection function's resources.
         id <MTLArgumentEncoder> encoder = [self newArgumentEncoderForResources:geometry.resources];
 
         // Bind the argument encoder to the resource buffer at this geometry's offset.
@@ -312,6 +335,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
             else if ([resource conformsToProtocol:@protocol(MTLTexture)])
                 [encoder setTexture:(id <MTLTexture>)resource atIndex:argumentIndex];
         }
+#endif
     }
 
 #if !TARGET_OS_IPHONE
@@ -325,16 +349,16 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // Query for the sizes needed to store and build the acceleration structure.
     MTLAccelerationStructureSizes accelSizes = [_device accelerationStructureSizesWithDescriptor:descriptor];
 
-    // Allocate an acceleration structure large enough for this descriptor. This doesn't actually
-    // build the acceleration structure, just allocates memory.
+    // Allocate an acceleration structure large enough for this descriptor. This method
+    // doesn't actually build the acceleration structure, but rather allocates memory.
     id <MTLAccelerationStructure> accelerationStructure = [_device newAccelerationStructureWithSize:accelSizes.accelerationStructureSize];
 
-    // Allocate scratch space used by Metal to build the acceleration structure.
-    // Use MTLResourceStorageModePrivate for best performance since the sample
+    // Allocate scratch space Metal uses to build the acceleration structure.
+    // Use MTLResourceStorageModePrivate for the best performance because the sample
     // doesn't need access to buffer's contents.
     id <MTLBuffer> scratchBuffer = [_device newBufferWithLength:accelSizes.buildScratchBufferSize options:MTLResourceStorageModePrivate];
 
-    // Create a command buffer which will perform the acceleration structure build
+    // Create a command buffer that performs the acceleration structure build.
     id <MTLCommandBuffer> commandBuffer = [_queue commandBuffer];
 
     // Create an acceleration structure command encoder.
@@ -343,23 +367,23 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // Allocate a buffer for Metal to write the compacted accelerated structure's size into.
     id <MTLBuffer> compactedSizeBuffer = [_device newBufferWithLength:sizeof(uint32_t) options:MTLResourceStorageModeShared];
 
-    // Schedule the actual acceleration structure build
+    // Schedule the actual acceleration structure build.
     [commandEncoder buildAccelerationStructure:accelerationStructure
                                     descriptor:descriptor
                                  scratchBuffer:scratchBuffer
                            scratchBufferOffset:0];
 
     // Compute and write the compacted acceleration structure size into the buffer. You
-    // must already have a built accelerated structure because Metal determines the compacted
+    // must already have a built acceleration structure because Metal determines the compacted
     // size based on the final size of the acceleration structure. Compacting an acceleration
-    // structure can potentially reclaim significant amounts of memory since Metal must
+    // structure can potentially reclaim significant amounts of memory because Metal must
     // create the initial structure using a conservative approach.
 
     [commandEncoder writeCompactedAccelerationStructureSize:accelerationStructure
                                                    toBuffer:compactedSizeBuffer
                                                      offset:0];
 
-    // End encoding and commit the command buffer so the GPU can start building the
+    // End encoding, and commit the command buffer so the GPU can start building the
     // acceleration structure.
     [commandEncoder endEncoding];
 
@@ -370,7 +394,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     // Note: Don't wait for Metal to finish executing the command buffer if you aren't compacting
     // the acceleration structure, as doing so requires CPU/GPU synchronization. You don't have
-    // to compact acceleration structures, but you should when creating large static acceleration
+    // to compact acceleration structures, but do so when creating large static acceleration
     // structures, such as static scene geometry. Avoid compacting acceleration structures that
     // you rebuild every frame, as the synchronization cost may be significant.
 
@@ -404,9 +428,9 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
 // Create acceleration structures for the scene. The scene contains primitive acceleration
 // structures and an instance acceleration structure. The primitive acceleration structures
-// contain primitives such as triangles and spheres. The instance acceleration structure contains
-// copies or "instances" of the primitive acceleration structures, each with their own
-// transformation matrix describing where to place them in the scene.
+// contain primitives, such as triangles and spheres. The instance acceleration structure contains
+// copies, or instances, of the primitive acceleration structures, each with their own
+// transformation matrix that describes where to place them in the scene.
 - (void)createAccelerationStructures
 {
     MTLResourceOptions options = getManagedBufferStorageMode();
@@ -466,9 +490,9 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         // to secondary rays, which would result in their contribution being double-counted.
         instanceDescriptors[instanceIndex].mask = (uint32_t)instance.mask;
 
-        // Copy the first three rows of the instance transformation matrix. Metal assumes that
-        // the bottom row is (0, 0, 0, 1).
-        // This allows instance descriptors to be tightly packed in memory.
+        // Copy the first three rows of the instance transformation matrix. Metal
+        // assumes that the bottom row is (0, 0, 0, 1), which allows the renderer to
+        // tightly pack instance descriptors in memory.
         for (int column = 0; column < 4; column++)
             for (int row = 0; row < 3; row++)
                 instanceDescriptors[instanceIndex].transformationMatrix.columns[column][row] = instance.transform.columns[column][row];
@@ -485,8 +509,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     accelDescriptor.instanceCount = _scene.instances.count;
     accelDescriptor.instanceDescriptorBuffer = _instanceBuffer;
 
-    // Finally, create the instance acceleration structure containing all of the instances
-    // in the scene.
+    // Create the instance acceleration structure that contains all instances in the scene.
     _instanceAccelerationStructure = [self newAccelerationStructureWithDescriptor:accelDescriptor];
 }
 
@@ -494,7 +517,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 {
     _size = size;
 
-    // Create a pair of textures which the ray tracing kernel will use to accumulate
+    // Create a pair of textures that the ray tracing kernel uses to accumulate
     // samples over several frames.
     MTLTextureDescriptor *textureDescriptor = [[MTLTextureDescriptor alloc] init];
 
@@ -503,14 +526,14 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     textureDescriptor.width = size.width;
     textureDescriptor.height = size.height;
 
-    // Stored in private memory because only the GPU will read or write this texture.
+    // Store the texture in private memory because only the GPU reads or writes this texture.
     textureDescriptor.storageMode = MTLStorageModePrivate;
     textureDescriptor.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
 
     for (NSUInteger i = 0; i < 2; i++)
         _accumulationTargets[i] = [_device newTextureWithDescriptor:textureDescriptor];
 
-    // Create a texture containing a random integer value for each pixel. the sample
+    // Create a texture that contains a random integer value for each pixel. The sample
     // uses these values to decorrelate pixels while drawing pseudorandom numbers from the
     // Halton sequence.
     textureDescriptor.pixelFormat = MTLPixelFormatR32Uint;
@@ -593,11 +616,11 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     __block dispatch_semaphore_t sem = _sem;
 
-    // When the GPU finishes processing command buffer for the frame, signal the
-    // semaphore to make the space in uniform available for future frames.
+    // When the GPU finishes processing the command buffer for the frame, signal
+    // the semaphore to make the space in uniform available for future frames.
 
-    // Note: Completion handlers should be as fast as possible as the GPU driver may
-    // have other work scheduled on the underlying dispatch queue.
+    // Note: Completion handlers should be as fast as possible because the GPU
+    // driver may have other work scheduled on the underlying dispatch queue.
     [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
         dispatch_semaphore_signal(sem);
     }];
@@ -621,9 +644,11 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // Create a compute encoder to encode GPU commands.
     id <MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
 
-    // Bind buffers
+    // Bind buffers.
     [computeEncoder setBuffer:_uniformBuffer            offset:_uniformBufferOffset atIndex:0];
-    [computeEncoder setBuffer:_resourceBuffer           offset:0                    atIndex:1];
+    if (!_usePerPrimitiveData) {
+        [computeEncoder setBuffer:_resourceBuffer           offset:0                    atIndex:1];
+    }
     [computeEncoder setBuffer:_instanceBuffer           offset:0                    atIndex:2];
     [computeEncoder setBuffer:_scene.lightBuffer        offset:0                    atIndex:3];
 
@@ -633,7 +658,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     [computeEncoder setIntersectionFunctionTable:_intersectionFunctionTable atBufferIndex:5];
 
     // Bind textures. The ray tracing kernel reads from _accumulationTargets[0], averages the
-    // result with this frame's samples, and writes to _accumulationTargets[1].
+    // result with this frame's samples and writes to _accumulationTargets[1].
     [computeEncoder setTexture:_randomTexture atIndex:0];
     [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
     [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
@@ -665,11 +690,11 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     std::swap(_accumulationTargets[0], _accumulationTargets[1]);
 
     if (view.currentDrawable) {
-        // Copy the resulting image into the view using the graphics pipeline since the sample
+        // Copy the resulting image into the view using the graphics pipeline because the sample
         // can't write directly to it using the compute kernel. The sample delays getting the
         // current render pass descriptor as long as possible to avoid a lenghty stall waiting
         // for the GPU/compositor to release a drawable. The drawable may be nil if
-        // the window moved off screen.
+        // the window moves off screen.
         MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
 
         renderPassDescriptor.colorAttachments[0].texture    = view.currentDrawable.texture;

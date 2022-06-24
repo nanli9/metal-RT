@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Header for class describing objects in a scene
+The header for the class that describes objects in a scene.
 */
 
 #ifndef Scene_h
@@ -30,7 +30,7 @@ struct BoundingBox {
 MTLResourceOptions getManagedBufferStorageMode();
 
 // Represents a piece of geometry in a scene, The sample composes Geometry objects
-// from primitives such as triangles or spheres. Each Geometry object has its
+// from primitives such as triangles or spheres. Each geometry object has its
 // own primitive acceleration structure and, optionally, an intersection function.
 // The sample creates copies, or "instances" of geometry objects using the GeometryInstance
 // class.
@@ -56,7 +56,7 @@ MTLResourceOptions getManagedBufferStorageMode();
 // geometry.
 - (MTLAccelerationStructureGeometryDescriptor *)geometryDescriptor;
 
-// Get the array of Metal resources such as buffers and textures to pass
+// Get the array of Metal resources, such as buffers and textures, to pass
 // to the geometry's intersection function.
 - (NSArray <id <MTLResource>> *)resources;
 
@@ -83,7 +83,7 @@ MTLResourceOptions getManagedBufferStorageMode();
 @end
 
 // Represents an instance, or copy, of a piece of geometry in a scene.
-// Each instance has its own transformation matrix which determines
+// Each instance has its own transformation matrix that determines
 // where to place it in the scene.
 @interface GeometryInstance : NSObject
 
@@ -124,20 +124,20 @@ MTLResourceOptions getManagedBufferStorageMode();
 // Number of lights in the light buffer.
 @property (nonatomic, readonly) NSUInteger lightCount;
 
-// Camera "position" vector.
+// Camera position vector.
 @property (nonatomic) vector_float3 cameraPosition;
 
-// Camera "target" vector. The camera faces this point.
+// Camera target vector. The camera faces this point.
 @property (nonatomic) vector_float3 cameraTarget;
 
-// Camera "up" vector.
+// Camera up vector.
 @property (nonatomic) vector_float3 cameraUp;
 
 // Initializer
 - (instancetype)initWithDevice:(id <MTLDevice>)device;
 
-// Create scene with instances of a Cornell Box. Each box can optionally
-// contain a sphere primitive which uses an intersection function.
+// Create scene with instances of a Cornell box. Each box can optionally
+// contain a sphere primitive that uses an intersection function.
 + (Scene *)newInstancedCornellBoxSceneWithDevice:(id <MTLDevice>)device
                         useIntersectionFunctions:(BOOL)useIntersectionFunctions;
 

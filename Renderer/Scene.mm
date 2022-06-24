@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Implementation of class describing objects in a scene
+The implementation of the class that describes objects in a scene.
 */
 
 #import "Scene.h"
@@ -60,13 +60,17 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
 }
 
 @implementation TriangleGeometry {
+    id <MTLBuffer> _indexBuffer;
     id <MTLBuffer> _vertexPositionBuffer;
     id <MTLBuffer> _vertexNormalBuffer;
     id <MTLBuffer> _vertexColorBuffer;
+    id <MTLBuffer> _perPrimitiveDataBuffer;
 
+    std::vector<uint16_t> _indices;
     std::vector<vector_float3> _vertices;
     std::vector<vector_float3> _normals;
     std::vector<vector_float3> _colors;
+    std::vector<Triangle> _triangles;
 };
 
 - (void)uploadToBuffers {
@@ -74,39 +78,47 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
 
     id <MTLDevice> device = self.device;
 
+    _indexBuffer = [device newBufferWithLength:_indices.size() * sizeof(uint16_t) options:options];
     _vertexPositionBuffer = [device newBufferWithLength:_vertices.size() * sizeof(vector_float3) options:options];
     _vertexNormalBuffer = [device newBufferWithLength:_normals.size() * sizeof(vector_float3) options:options];
     _vertexColorBuffer = [device newBufferWithLength:_colors.size() * sizeof(vector_float3) options:options];
+    _perPrimitiveDataBuffer = [device newBufferWithLength:_triangles.size() * sizeof(Triangle) options:options];
 
-    memcpy(_vertexPositionBuffer.contents, &_vertices[0], _vertexPositionBuffer.length);
-    memcpy(_vertexNormalBuffer.contents, &_normals[0], _vertexNormalBuffer.length);
-    memcpy(_vertexColorBuffer.contents, &_colors[0], _vertexColorBuffer.length);
+    memcpy(_indexBuffer.contents, _indices.data(), _indexBuffer.length);
+    memcpy(_vertexPositionBuffer.contents, _vertices.data(), _vertexPositionBuffer.length);
+    memcpy(_vertexNormalBuffer.contents, _normals.data(), _vertexNormalBuffer.length);
+    memcpy(_vertexColorBuffer.contents, _colors.data(), _vertexColorBuffer.length);
+    memcpy(_perPrimitiveDataBuffer.contents, _triangles.data(), _perPrimitiveDataBuffer.length);
 
 #if !TARGET_OS_IPHONE
+    [_indexBuffer didModifyRange:NSMakeRange(0, _indexBuffer.length)];
     [_vertexPositionBuffer didModifyRange:NSMakeRange(0, _vertexPositionBuffer.length)];
     [_vertexNormalBuffer didModifyRange:NSMakeRange(0, _vertexNormalBuffer.length)];
     [_vertexColorBuffer didModifyRange:NSMakeRange(0, _vertexColorBuffer.length)];
+    [_perPrimitiveDataBuffer didModifyRange:NSMakeRange(0, _perPrimitiveDataBuffer.length)];
 #endif
 }
 
 - (void)clear {
+    _indices.clear();
     _vertices.clear();
     _normals.clear();
     _colors.clear();
+    _triangles.clear();
 }
 
 - (void)addCubeFaceWithCubeVertices:(float3 *)cubeVertices
                               color:(float3)color
-                                 i0:(unsigned int)i0
-                                 i1:(unsigned int)i1
-                                 i2:(unsigned int)i2
-                                 i3:(unsigned int)i3
+                                 i0:(uint16_t)i0
+                                 i1:(uint16_t)i1
+                                 i2:(uint16_t)i2
+                                 i3:(uint16_t)i3
                       inwardNormals:(bool)inwardNormals
 {
-    float3 v0 = cubeVertices[i0];
-    float3 v1 = cubeVertices[i1];
-    float3 v2 = cubeVertices[i2];
-    float3 v3 = cubeVertices[i3];
+    const float3 v0 = cubeVertices[i0];
+    const float3 v1 = cubeVertices[i1];
+    const float3 v2 = cubeVertices[i2];
+    const float3 v3 = cubeVertices[i3];
 
     float3 n0 = getTriangleNormal(v0, v1, v2);
     float3 n1 = getTriangleNormal(v0, v2, v3);
@@ -115,22 +127,41 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
         n0 = -n0;
         n1 = -n1;
     }
+    
+    const size_t firstIndex = _indices.size();
+
+    const uint16_t baseIndex = (uint16_t)_vertices.size();
+    _indices.push_back(baseIndex + 0);
+    _indices.push_back(baseIndex + 1);
+    _indices.push_back(baseIndex + 2);
+    _indices.push_back(baseIndex + 0);
+    _indices.push_back(baseIndex + 2);
+    _indices.push_back(baseIndex + 3);
 
     _vertices.push_back(v0);
     _vertices.push_back(v1);
     _vertices.push_back(v2);
-    _vertices.push_back(v0);
-    _vertices.push_back(v2);
     _vertices.push_back(v3);
+    
+    _normals.push_back(normalize(n0 + n1));
+    _normals.push_back(n0);
+    _normals.push_back(normalize(n0 + n1));
+    _normals.push_back(n1);
 
-    for (int i = 0; i < 3; i++)
-        _normals.push_back(n0);
-
-    for (int i = 0; i < 3; i++)
-        _normals.push_back(n1);
-
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 4; i++)
         _colors.push_back(color);
+
+    for (size_t triangleIndex = 0; triangleIndex < 2; triangleIndex ++)
+    {
+        Triangle triangle;
+        for (size_t i = 0; i < 3; i++)
+        {
+            const uint16_t index = _indices[firstIndex + triangleIndex * 3 + i];
+            triangle.normals[i] = _normals[index];
+            triangle.colors[i] = _colors[index];
+        }
+        _triangles.push_back(triangle);
+    }
 }
 
 - (void)addCubeWithFaces:(unsigned int)faceMask
@@ -158,7 +189,7 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
         cubeVertices[i] = transformedVertex.xyz;
     }
 
-    unsigned int cubeIndices[][4] = {
+    uint16_t cubeIndices[][4] = {
         { 0, 4, 6, 2 },
         { 1, 3, 7, 5 },
         { 0, 1, 5, 4 },
@@ -185,19 +216,28 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
     // a geometry descriptor. The sample uses a triangle geometry descriptor to represent
     // triangle geometry. Each triangle geometry descriptor can have its own
     // vertex buffer, index buffer, and triangle count. The sample use a single geometry
-    // descriptor since it already packed all of the vertex data into a single buffer.
+    // descriptor because it already packed all of the vertex data into a single buffer.
     MTLAccelerationStructureTriangleGeometryDescriptor *descriptor = [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
+
+    descriptor.indexBuffer = _indexBuffer;
+    descriptor.indexType = MTLIndexTypeUInt16;
 
     descriptor.vertexBuffer = _vertexPositionBuffer;
     descriptor.vertexStride = sizeof(float3);
-    descriptor.triangleCount = _vertices.size() / 3;
+    descriptor.triangleCount = _indices.size() / 3;
+
+    if (@available(iOS 16, macOS 13, *)) {
+        descriptor.primitiveDataBuffer = _perPrimitiveDataBuffer;
+        descriptor.primitiveDataStride = sizeof(Triangle);
+        descriptor.primitiveDataElementSize = sizeof(Triangle);
+    }
 
     return descriptor;
 }
 
 - (NSArray <id <MTLResource>> *)resources {
     // The colors and normals for the vertices.
-    return @[ _vertexNormalBuffer, _vertexColorBuffer ];
+    return @[ _indexBuffer, _vertexNormalBuffer, _vertexColorBuffer ];
 }
 
 @end
@@ -205,6 +245,7 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
 @implementation SphereGeometry {
     id <MTLBuffer> _sphereBuffer;
     id <MTLBuffer> _boundingBoxBuffer;
+    id <MTLBuffer> _perPrimitiveDataBuffer;
 
     std::vector<Sphere> _spheres;
 };
@@ -236,8 +277,8 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
         boundingBoxes.push_back(bounds);
     }
 
-    memcpy(_sphereBuffer.contents, &_spheres[0], _sphereBuffer.length);
-    memcpy(_boundingBoxBuffer.contents, &boundingBoxes[0], _boundingBoxBuffer.length);
+    memcpy(_sphereBuffer.contents, _spheres.data(), _sphereBuffer.length);
+    memcpy(_boundingBoxBuffer.contents, boundingBoxes.data(), _boundingBoxBuffer.length);
 
 #if !TARGET_OS_IPHONE
     [_sphereBuffer didModifyRange:NSMakeRange(0, _sphereBuffer.length)];
@@ -256,8 +297,9 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
     Sphere sphere;
 
     sphere.origin = origin;
-    sphere.radius = radius;
+    sphere.radiusSquared = radius * radius;
     sphere.color = color;
+    sphere.radius = radius;
 
     _spheres.push_back(sphere);
 }
@@ -265,19 +307,25 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
 - (MTLAccelerationStructureGeometryDescriptor *)geometryDescriptor {
     // Metal represents each piece of geometry in an acceleration structure using
     // a geometry descriptor. The sample uses a bounding box geometry descriptor to
-    // represent a custom primitive type
+    // represent a custom primitive type.
 
     MTLAccelerationStructureBoundingBoxGeometryDescriptor *descriptor = [MTLAccelerationStructureBoundingBoxGeometryDescriptor descriptor];
 
     descriptor.boundingBoxBuffer = _boundingBoxBuffer;
     descriptor.boundingBoxCount = _spheres.size();
 
+    if (@available(iOS 16, macOS 13, *)) {
+        descriptor.primitiveDataBuffer = _sphereBuffer;
+        descriptor.primitiveDataStride = sizeof(Sphere);
+        descriptor.primitiveDataElementSize = sizeof(Sphere);
+    }
+
     return descriptor;
 }
 
 - (NSArray <id <MTLResource>> *)resources {
     // The sphere intersection function uses the sphere origins and radii to check for
-    // intersection with rays
+    // intersection with rays.
     return @[ _sphereBuffer ];
 }
 
@@ -395,7 +443,7 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
                       transform:transform
                   inwardNormals:true];
 
-    // Create a piece of triangle geometry for the Cornell Box.
+    // Create a piece of triangle geometry for the Cornell box.
     TriangleGeometry *geometryMesh = [[TriangleGeometry alloc] initWithDevice:device];
 
     [scene addGeometry:geometryMesh];
@@ -466,7 +514,7 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
 
             [scene addInstance:lightMeshInstance];
 
-            // Create an instance of the Cornell Box.
+            // Create an instance of the Cornell box.
             GeometryInstance *geometryMeshInstance = [[GeometryInstance alloc] initWithGeometry:geometryMesh
                                                                                       transform:transform
                                                                                            mask:GEOMETRY_MASK_TRIANGLE];

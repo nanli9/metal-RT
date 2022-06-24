@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Header for simple matrix math functions
+The header for simple matrix math functions.
 */
 
 #ifndef Transforms_h

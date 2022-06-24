@@ -2,7 +2,7 @@
 See LICENSE folder for this sample’s licensing information.
 
 Abstract:
-Implementation of the cross-platform app delegate.
+The implementation of the cross-platform app delegate.
 */
 #import "AppDelegate.h"
 
