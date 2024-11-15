@@ -1,5 +1,5 @@
 /*
-See LICENSE folder for this sample’s licensing information.
+See the LICENSE.txt file for this sample’s licensing information.
 
 Abstract:
 The implementation of the class that describes objects in a scene.
@@ -226,11 +226,13 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
     descriptor.vertexStride = sizeof(float3);
     descriptor.triangleCount = _indices.size() / 3;
 
+#if SUPPORTS_METAL_3
     if (@available(iOS 16, macOS 13, *)) {
         descriptor.primitiveDataBuffer = _perPrimitiveDataBuffer;
         descriptor.primitiveDataStride = sizeof(Triangle);
         descriptor.primitiveDataElementSize = sizeof(Triangle);
     }
+#endif
 
     return descriptor;
 }
@@ -314,11 +316,13 @@ float3 getTriangleNormal(float3 v0, float3 v1, float3 v2) {
     descriptor.boundingBoxBuffer = _boundingBoxBuffer;
     descriptor.boundingBoxCount = _spheres.size();
 
+#if SUPPORTS_METAL_3
     if (@available(iOS 16, macOS 13, *)) {
         descriptor.primitiveDataBuffer = _sphereBuffer;
         descriptor.primitiveDataStride = sizeof(Sphere);
         descriptor.primitiveDataElementSize = sizeof(Sphere);
     }
+#endif
 
     return descriptor;
 }

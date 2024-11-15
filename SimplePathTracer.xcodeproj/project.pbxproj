@@ -218,15 +218,15 @@
 				ECCD252A9D8DEF7E2FB2C6DD /* LICENSE.txt */,
 			);
 			name = LICENSE;
-			path = LICENSE;
+			path = .;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		40C99C2F283C6FBA0036DB4D /* SimplePathTracer-Metal3-macOS */ = {
+		40C99C2F283C6FBA0036DB4D /* macOS - Metal3 - SimplePathTracer */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 40C99C3E283C6FBA0036DB4D /* Build configuration list for PBXNativeTarget "SimplePathTracer-Metal3-macOS" */;
+			buildConfigurationList = 40C99C3E283C6FBA0036DB4D /* Build configuration list for PBXNativeTarget "macOS - Metal3 - SimplePathTracer" */;
 			buildPhases = (
 				40C99C30283C6FBA0036DB4D /* Sources */,
 				40C99C38283C6FBA0036DB4D /* Frameworks */,
@@ -236,14 +236,14 @@
 			);
 			dependencies = (
 			);
-			name = "SimplePathTracer-Metal3-macOS";
+			name = "macOS - Metal3 - SimplePathTracer";
 			productName = "SimpleRenderingSample-macOS";
 			productReference = 40C99C41283C6FBA0036DB4D /* SimplePathTracer-Metal3.app */;
 			productType = "com.apple.product-type.application";
 		};
-		40C99C43283C6FD60036DB4D /* SimplePathTracer-Metal3 iOS */ = {
+		40C99C43283C6FD60036DB4D /* iOS - Metal3 - SimplePathTracer */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 40C99C54283C6FD60036DB4D /* Build configuration list for PBXNativeTarget "SimplePathTracer-Metal3 iOS" */;
+			buildConfigurationList = 40C99C54283C6FD60036DB4D /* Build configuration list for PBXNativeTarget "iOS - Metal3 - SimplePathTracer" */;
 			buildPhases = (
 				40C99C44283C6FD60036DB4D /* Sources */,
 				40C99C4C283C6FD60036DB4D /* Frameworks */,
@@ -253,14 +253,14 @@
 			);
 			dependencies = (
 			);
-			name = "SimplePathTracer-Metal3 iOS";
+			name = "iOS - Metal3 - SimplePathTracer";
 			productName = "SimpleRenderingSample-iOS";
 			productReference = 40C99C57283C6FD60036DB4D /* SimplePathTracer-Metal3.app */;
 			productType = "com.apple.product-type.application";
 		};
-		51F7FFB1209BC1C40017E288 /* SimplePathTracer-Metal2-iOS */ = {
+		51F7FFB1209BC1C40017E288 /* iOS - Metal2 - SimplePathTracer */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 51F7FFBF209BC1C40017E288 /* Build configuration list for PBXNativeTarget "SimplePathTracer-Metal2-iOS" */;
+			buildConfigurationList = 51F7FFBF209BC1C40017E288 /* Build configuration list for PBXNativeTarget "iOS - Metal2 - SimplePathTracer" */;
 			buildPhases = (
 				51F7FFB2209BC1C40017E288 /* Sources */,
 				51F7FFB9209BC1C40017E288 /* Frameworks */,
@@ -270,14 +270,14 @@
 			);
 			dependencies = (
 			);
-			name = "SimplePathTracer-Metal2-iOS";
+			name = "iOS - Metal2 - SimplePathTracer";
 			productName = "SimpleRenderingSample-iOS";
 			productReference = 51F7FFC2209BC1C40017E288 /* SimplePathTracer-Metal2.app */;
 			productType = "com.apple.product-type.application";
 		};
-		51F7FFC4209BC1C60017E288 /* SimplePathTracer-Metal2-macOS */ = {
+		51F7FFC4209BC1C60017E288 /* macOS - Metal2 - SimplePathTracer */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 51F7FFD1209BC1C60017E288 /* Build configuration list for PBXNativeTarget "SimplePathTracer-Metal2-macOS" */;
+			buildConfigurationList = 51F7FFD1209BC1C60017E288 /* Build configuration list for PBXNativeTarget "macOS - Metal2 - SimplePathTracer" */;
 			buildPhases = (
 				51F7FFC5209BC1C60017E288 /* Sources */,
 				51F7FFCC209BC1C60017E288 /* Frameworks */,
@@ -287,7 +287,7 @@
 			);
 			dependencies = (
 			);
-			name = "SimplePathTracer-Metal2-macOS";
+			name = "macOS - Metal2 - SimplePathTracer";
 			productName = "SimpleRenderingSample-macOS";
 			productReference = 51F7FFD4209BC1C60017E288 /* SimplePathTracer-Metal2.app */;
 			productType = "com.apple.product-type.application";
@@ -298,8 +298,10 @@
 		51E97F642016FC6600D09D13 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 1200;
+				LastUpgradeCheck = 1400;
 				ORGANIZATIONNAME = Apple;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = 51E97F672016FC6600D09D13 /* Build configuration list for PBXProject "SimplePathTracer" */;
 			compatibilityVersion = "Xcode 9.3";
@@ -314,10 +316,10 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				40C99C2F283C6FBA0036DB4D /* SimplePathTracer-Metal3-macOS */,
-				40C99C43283C6FD60036DB4D /* SimplePathTracer-Metal3 iOS */,
-				51F7FFC4209BC1C60017E288 /* SimplePathTracer-Metal2-macOS */,
-				51F7FFB1209BC1C40017E288 /* SimplePathTracer-Metal2-iOS */,
+				51F7FFB1209BC1C40017E288 /* iOS - Metal2 - SimplePathTracer */,
+				40C99C43283C6FD60036DB4D /* iOS - Metal3 - SimplePathTracer */,
+				40C99C2F283C6FBA0036DB4D /* macOS - Metal3 - SimplePathTracer */,
+				51F7FFC4209BC1C60017E288 /* macOS - Metal2 - SimplePathTracer */,
 			);
 		};
 /* End PBXProject section */
@@ -460,8 +462,10 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -489,8 +493,10 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=1";
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -510,9 +516,10 @@
 			baseConfigurationReference = F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -538,9 +545,10 @@
 			baseConfigurationReference = F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=1";
 				INFOPLIST_FILE = Application/iOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -592,6 +600,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -650,6 +659,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -671,9 +681,10 @@
 			baseConfigurationReference = F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -701,9 +712,10 @@
 			baseConfigurationReference = F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=0";
 				INFOPLIST_FILE = Application/iOS/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
@@ -730,8 +742,10 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -761,8 +775,10 @@
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=0";
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -782,7 +798,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		40C99C3E283C6FBA0036DB4D /* Build configuration list for PBXNativeTarget "SimplePathTracer-Metal3-macOS" */ = {
+		40C99C3E283C6FBA0036DB4D /* Build configuration list for PBXNativeTarget "macOS - Metal3 - SimplePathTracer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				40C99C3F283C6FBA0036DB4D /* Debug */,
@@ -791,7 +807,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		40C99C54283C6FD60036DB4D /* Build configuration list for PBXNativeTarget "SimplePathTracer-Metal3 iOS" */ = {
+		40C99C54283C6FD60036DB4D /* Build configuration list for PBXNativeTarget "iOS - Metal3 - SimplePathTracer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				40C99C55283C6FD60036DB4D /* Debug */,
@@ -809,7 +825,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		51F7FFBF209BC1C40017E288 /* Build configuration list for PBXNativeTarget "SimplePathTracer-Metal2-iOS" */ = {
+		51F7FFBF209BC1C40017E288 /* Build configuration list for PBXNativeTarget "iOS - Metal2 - SimplePathTracer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				51F7FFC0209BC1C40017E288 /* Debug */,
@@ -818,7 +834,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		51F7FFD1209BC1C60017E288 /* Build configuration list for PBXNativeTarget "SimplePathTracer-Metal2-macOS" */ = {
+		51F7FFD1209BC1C60017E288 /* Build configuration list for PBXNativeTarget "macOS - Metal2 - SimplePathTracer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				51F7FFD2209BC1C60017E288 /* Debug */,

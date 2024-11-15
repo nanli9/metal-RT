@@ -1,5 +1,5 @@
 /*
-See LICENSE folder for this sample’s licensing information.
+See the LICENSE.txt file for this sample’s licensing information.
 
 Abstract:
 The implementation of the renderer class that performs Metal setup and per-frame rendering.
@@ -287,8 +287,8 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // the starting address for their resources.
     for (Geometry *geometry in _scene.geometries) {
 #if SUPPORTS_METAL_3
-        if (geometry.resources.count * sizeof(MTLGPUHandle) > _resourcesStride)
-            _resourcesStride = geometry.resources.count * sizeof(MTLGPUHandle);
+        if (geometry.resources.count * sizeof(uint64_t) > _resourcesStride)
+            _resourcesStride = geometry.resources.count * sizeof(uint64_t);
 #else
         id <MTLArgumentEncoder> encoder = [self newArgumentEncoderForResources:geometry.resources];
 
@@ -309,7 +309,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
         // Get a pointer to the resource buffer.
         // Resources can return a gpuAddress or gpuResourceID, which are both the same size as a uint64_t.
-        uint64_t *resourceHandles = (MTLGPUHandle*)((uint8_t*)_resourceBuffer.contents + _resourcesStride * geometryIndex);
+        uint64_t *resourceHandles = (uint64_t*)((uint8_t*)_resourceBuffer.contents + _resourcesStride * geometryIndex);
 
         // Encode the arguments into the resource buffer.
         for (NSUInteger argumentIndex = 0; argumentIndex < resources.count; argumentIndex++) {
