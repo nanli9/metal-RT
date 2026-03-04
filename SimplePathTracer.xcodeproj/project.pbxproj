@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 50;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -27,7 +27,6 @@
 		40C99C4B283C6FD60036DB4D /* ViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5113DCA024773F1000259320 /* ViewController.mm */; };
 		40C99C4D283C6FD60036DB4D /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 51FA2C0E24EDCF0000C94F4E /* MetalKit.framework */; };
 		40C99C4F283C6FD60036DB4D /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 3E9448D520BC6BF0001DD43A /* README.md */; };
-		40C99C50283C6FD60036DB4D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 51F7FFF6209BC3C00017E288 /* LaunchScreen.storyboard */; };
 		40C99C51283C6FD60036DB4D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5113DC9F24773F1000259320 /* Assets.xcassets */; };
 		40C99C52283C6FD60036DB4D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 51F7FFF8209BC3C00017E288 /* Main.storyboard */; };
 		5113DCA324773F1000259320 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 5113DC9E24773F1000259320 /* main.m */; };
@@ -47,10 +46,11 @@
 		51F7000E209BC4050017E288 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 51F7FFE2209BC3530017E288 /* Shaders.metal */; };
 		51F7000F209BC4050017E288 /* Transforms.mm in Sources */ = {isa = PBXBuildFile; fileRef = 51F7FFE1209BC3530017E288 /* Transforms.mm */; };
 		51F70012209BCA010017E288 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 51F7FFF8209BC3C00017E288 /* Main.storyboard */; };
-		51F70013209BCA010017E288 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 51F7FFF6209BC3C00017E288 /* LaunchScreen.storyboard */; };
 		51F7001A209BCA180017E288 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 51F70006209BC3F00017E288 /* Main.storyboard */; };
 		51FA2C0F24EDCF0000C94F4E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 51FA2C0E24EDCF0000C94F4E /* MetalKit.framework */; };
 		51FA2C1124EDCF0600C94F4E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 51FA2C1024EDCF0600C94F4E /* MetalKit.framework */; };
+		5236FED52F3FE41000437B09 /* WindowSceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 5236FED42F3FE41000437B09 /* WindowSceneDelegate.m */; };
+		5236FED62F3FE41000437B09 /* WindowSceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 5236FED42F3FE41000437B09 /* WindowSceneDelegate.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -77,10 +77,11 @@
 		51F7FFE1209BC3530017E288 /* Transforms.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = Transforms.mm; sourceTree = "<group>"; };
 		51F7FFE2209BC3530017E288 /* Shaders.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		51F7FFF1209BC3B70017E288 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		51F7FFF7209BC3C00017E288 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		51F7FFF9209BC3C00017E288 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		51FA2C0E24EDCF0000C94F4E /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/MetalKit.framework; sourceTree = DEVELOPER_DIR; };
 		51FA2C1024EDCF0600C94F4E /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		5236FED32F3FE41000437B09 /* WindowSceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WindowSceneDelegate.h; sourceTree = "<group>"; };
+		5236FED42F3FE41000437B09 /* WindowSceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WindowSceneDelegate.m; sourceTree = "<group>"; };
 		ECCD252A9D8DEF7E2FB2C6DD /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE.txt; sourceTree = "<group>"; };
 		F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */ = {isa = PBXFileReference; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -127,6 +128,8 @@
 				5113DC9E24773F1000259320 /* main.m */,
 				5113DCA124773F1000259320 /* AppDelegate.h */,
 				5113DCA224773F1000259320 /* AppDelegate.m */,
+				5236FED32F3FE41000437B09 /* WindowSceneDelegate.h */,
+				5236FED42F3FE41000437B09 /* WindowSceneDelegate.m */,
 				5113DC9D24773F1000259320 /* ViewController.h */,
 				5113DCA024773F1000259320 /* ViewController.mm */,
 				5113DC9F24773F1000259320 /* Assets.xcassets */,
@@ -189,7 +192,6 @@
 			isa = PBXGroup;
 			children = (
 				51F7FFF8209BC3C00017E288 /* Main.storyboard */,
-				51F7FFF6209BC3C00017E288 /* LaunchScreen.storyboard */,
 				51F7FFF1209BC3B70017E288 /* Info.plist */,
 			);
 			path = iOS;
@@ -298,7 +300,8 @@
 		51E97F642016FC6600D09D13 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 1400;
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2620;
 				ORGANIZATIONNAME = Apple;
 				TargetAttributes = {
 				};
@@ -339,7 +342,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				40C99C4F283C6FD60036DB4D /* README.md in Resources */,
-				40C99C50283C6FD60036DB4D /* LaunchScreen.storyboard in Resources */,
 				40C99C51283C6FD60036DB4D /* Assets.xcassets in Resources */,
 				40C99C52283C6FD60036DB4D /* Main.storyboard in Resources */,
 			);
@@ -350,7 +352,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				3E9448D620BC6BF0001DD43A /* README.md in Resources */,
-				51F70013209BCA010017E288 /* LaunchScreen.storyboard in Resources */,
 				5113DCA524773F1000259320 /* Assets.xcassets in Resources */,
 				51F70012209BCA010017E288 /* Main.storyboard in Resources */,
 			);
@@ -387,6 +388,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				40C99C45283C6FD60036DB4D /* Shaders.metal in Sources */,
+				5236FED52F3FE41000437B09 /* WindowSceneDelegate.m in Sources */,
 				40C99C46283C6FD60036DB4D /* Transforms.mm in Sources */,
 				40C99C47283C6FD60036DB4D /* AppDelegate.m in Sources */,
 				40C99C48283C6FD60036DB4D /* Renderer.mm in Sources */,
@@ -401,6 +403,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				51F7000B209BC4040017E288 /* Shaders.metal in Sources */,
+				5236FED62F3FE41000437B09 /* WindowSceneDelegate.m in Sources */,
 				51F7000C209BC4040017E288 /* Transforms.mm in Sources */,
 				5113DCA924773F1000259320 /* AppDelegate.m in Sources */,
 				51F7000A209BC4040017E288 /* Renderer.mm in Sources */,
@@ -435,14 +438,6 @@
 			name = Main.storyboard;
 			sourceTree = "<group>";
 		};
-		51F7FFF6209BC3C00017E288 /* LaunchScreen.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				51F7FFF7209BC3C00017E288 /* Base */,
-			);
-			name = LaunchScreen.storyboard;
-			sourceTree = "<group>";
-		};
 		51F7FFF8209BC3C00017E288 /* Main.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (
@@ -469,7 +464,6 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
-					__APPLE_INTERNAL__,
 					"SUPPORTS_METAL_3=1",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
@@ -477,6 +471,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14;
 				MTL_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=1";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.SimplePathTracer-Metal3${SAMPLE_CODE_DISAMBIGUATOR}";
 				PRODUCT_NAME = "SimplePathTracer-Metal3";
@@ -503,6 +498,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14;
 				MTL_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=1";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.SimplePathTracer-Metal3${SAMPLE_CODE_DISAMBIGUATOR}";
 				PRODUCT_NAME = "SimplePathTracer-Metal3";
@@ -523,10 +519,11 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
-					__APPLE_INTERNAL__,
+					"TARGET_IOS=1",
 					"SUPPORTS_METAL_3=1",
 				);
 				INFOPLIST_FILE = Application/iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -549,8 +546,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=1";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"SUPPORTS_METAL_3=1",
+					"TARGET_IOS=1",
+				);
 				INFOPLIST_FILE = Application/iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -602,8 +603,10 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = A93A5CM278;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -621,6 +624,7 @@
 				MTL_ENABLE_DEBUG_INFO = YES;
 				MTL_LANGUAGE_REVISION = Metal30;
 				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 			};
 			name = Debug;
 		};
@@ -661,8 +665,10 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = A93A5CM278;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -673,6 +679,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_LANGUAGE_REVISION = Metal30;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 			};
 			name = Release;
 		};
@@ -688,11 +695,11 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
-					__APPLE_INTERNAL__,
+					"TARGET_IOS=1",
 					"SUPPORTS_METAL_3=0",
 				);
 				INFOPLIST_FILE = Application/iOS/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -716,9 +723,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=0";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"SUPPORTS_METAL_3=0",
+					"TARGET_IOS=1",
+				);
 				INFOPLIST_FILE = Application/iOS/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -749,7 +759,6 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
-					__APPLE_INTERNAL__,
 					"SUPPORTS_METAL_3=0",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
@@ -757,7 +766,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 14;
 				MTL_LANGUAGE_REVISION = Metal23;
 				MTL_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=0";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.SimplePathTracer-Metal2${SAMPLE_CODE_DISAMBIGUATOR}";
@@ -785,7 +794,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 14;
 				MTL_LANGUAGE_REVISION = Metal23;
 				MTL_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=0";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.SimplePathTracer-Metal2${SAMPLE_CODE_DISAMBIGUATOR}";

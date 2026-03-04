@@ -5,20 +5,20 @@ Abstract:
 The header for the cross-platform app delegate.
 */
 
-#import <TargetConditionals.h>
-
-#if !TARGET_OS_IPHONE
-#import <Cocoa/Cocoa.h>
-
-@interface AppDelegate : NSObject <NSApplicationDelegate>
-
-@end
+#if defined(TARGET_IOS)
+@import UIKit;
+#define PlatformAppDelegate UIResponder <UIApplicationDelegate>
+#define PlatformWindow UIWindow
 #else
-#import <UIKit/UIKit.h>
+@import AppKit;
+#define PlatformAppDelegate NSObject <NSApplicationDelegate>
+#define PlatformWindow NSWindow
+#endif
 
-@interface AppDelegate : UIResponder <UIApplicationDelegate>
+@interface AAPLAppDelegate : PlatformAppDelegate
 
-@property (strong, nonatomic) UIWindow *window;
+#if !TARGET_IOS
+@property (strong, nonatomic) PlatformWindow *window;
+#endif
 
 @end
-#endif

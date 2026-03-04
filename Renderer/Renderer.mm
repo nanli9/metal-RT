@@ -249,7 +249,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         MTLArgumentDescriptor *argumentDescriptor = [MTLArgumentDescriptor argumentDescriptor];
 
         argumentDescriptor.index = arguments.count;
-        argumentDescriptor.access = MTLArgumentAccessReadOnly;
+        argumentDescriptor.access = MTLBindingAccessReadOnly;
 
         if ([resource conformsToProtocol:@protocol(MTLBuffer)])
             argumentDescriptor.dataType = MTLDataTypePointer;
