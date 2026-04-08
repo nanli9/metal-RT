@@ -22,3 +22,5 @@ xcuserdata/
 
 # Runtime log output
 log.txt
+# Xcode build artifacts
+DerivedData/
