@@ -69,6 +69,8 @@
 		A1B2C303000000000000B006 /* imgui_impl_metal.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F006 /* imgui_impl_metal.mm */; };
 		A1B2C303000000000000B007 /* imgui_impl_osx.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F007 /* imgui_impl_osx.mm */; };
 		A1B2C303000000000000B008 /* DDSLoader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F008 /* DDSLoader.mm */; };
+		A1B2C305000000000000B001 /* SceneImporter.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C305000000000000F001 /* SceneImporter.mm */; };
+		A1B2C305000000000000B002 /* SceneImporter.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C305000000000000F001 /* SceneImporter.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -111,6 +113,7 @@
 		A1B2C301000000000000F006 /* imgui_impl_metal.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = imgui_impl_metal.mm; sourceTree = "<group>"; };
 		A1B2C301000000000000F007 /* imgui_impl_osx.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = imgui_impl_osx.mm; sourceTree = "<group>"; };
 		A1B2C301000000000000F008 /* DDSLoader.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DDSLoader.mm; sourceTree = "<group>"; };
+		A1B2C305000000000000F001 /* SceneImporter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneImporter.mm; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -305,6 +308,7 @@
 		A1B2C304000000000000A006 /* Import */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C305000000000000F001 /* SceneImporter.mm */,
 			);
 			path = Import;
 			sourceTree = "<group>";
@@ -479,6 +483,7 @@
 				A1B2C302000000000000B006 /* imgui_impl_metal.mm in Sources */,
 				A1B2C302000000000000B007 /* imgui_impl_osx.mm in Sources */,
 				A1B2C302000000000000B008 /* DDSLoader.mm in Sources */,
+				A1B2C305000000000000B001 /* SceneImporter.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -531,6 +536,7 @@
 				A1B2C303000000000000B006 /* imgui_impl_metal.mm in Sources */,
 				A1B2C303000000000000B007 /* imgui_impl_osx.mm in Sources */,
 				A1B2C303000000000000B008 /* DDSLoader.mm in Sources */,
+				A1B2C305000000000000B002 /* SceneImporter.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -579,6 +585,7 @@
 					"$(SRCROOT)/ThirdParty/imgui",
 					"$(SRCROOT)/ThirdParty/dds_loader",
 					"$(SRCROOT)/Scene",
+					"$(SRCROOT)/Import",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -613,6 +620,7 @@
 					"$(SRCROOT)/ThirdParty/imgui",
 					"$(SRCROOT)/ThirdParty/dds_loader",
 					"$(SRCROOT)/Scene",
+					"$(SRCROOT)/Import",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -888,6 +896,7 @@
 					"$(SRCROOT)/ThirdParty/imgui",
 					"$(SRCROOT)/ThirdParty/dds_loader",
 					"$(SRCROOT)/Scene",
+					"$(SRCROOT)/Import",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -923,6 +932,7 @@
 					"$(SRCROOT)/ThirdParty/imgui",
 					"$(SRCROOT)/ThirdParty/dds_loader",
 					"$(SRCROOT)/Scene",
+					"$(SRCROOT)/Import",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -22,13 +22,13 @@ _No visual changes. Verify everything compiles._
 ## Phase 1: Import Layer
 _Goal: FBX → engine-independent C++ structs._
 
-- [ ] **1.1** Write `Import/ImportedScene.h` — plain C++ structs: `ImportedMesh`, `ImportedMaterial`, `ImportedNode`, `ImportedScene`
-- [ ] **1.2** Write `Import/SceneImporter.h/mm` — ufbx-based FBX loader: read meshes (uint32 indices, positions, normals, UVs, tangents), materials (texture paths), nodes (transforms)
-- [ ] **1.3** Flatten node hierarchy into instance list in SceneImporter
-- [ ] **1.4** Resolve texture paths relative to `Bistro_v5_2/Textures/`
-- [ ] **1.5** Generate tangents via ufbx if not present in FBX
-- [ ] **1.6** Log unsupported features (skeletal animation, morph targets) instead of silently ignoring
-- [ ] **1.7** Test: load `BistroExterior.fbx`, log mesh count, material count, instance count — verify data looks correct
+- [x] **1.1** Write `Import/ImportedScene.h` — plain C++ structs: `ImportedMesh`, `ImportedMaterial`, `ImportedNode`, `ImportedScene`
+- [x] **1.2** Write `Import/SceneImporter.h/mm` — ufbx-based FBX loader: read meshes (uint32 indices, positions, normals, UVs, tangents), materials (texture paths), nodes (transforms)
+- [x] **1.3** Flatten node hierarchy into instance list in SceneImporter
+- [x] **1.4** Resolve texture paths relative to `Bistro_v5_2/Textures/`
+- [x] **1.5** Generate tangents via ufbx if not present in FBX
+- [x] **1.6** Log unsupported features (skeletal animation, morph targets) instead of silently ignoring
+- [x] **1.7** Test: load `BistroExterior.fbx`, log mesh count, material count, instance count — verify data looks correct
 
 **STOP — wait for user review before starting Phase 2.**
 
