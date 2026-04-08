@@ -51,6 +51,24 @@
 		51FA2C1124EDCF0600C94F4E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 51FA2C1024EDCF0600C94F4E /* MetalKit.framework */; };
 		5236FED52F3FE41000437B09 /* WindowSceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 5236FED42F3FE41000437B09 /* WindowSceneDelegate.m */; };
 		5236FED62F3FE41000437B09 /* WindowSceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 5236FED42F3FE41000437B09 /* WindowSceneDelegate.m */; };
+		A1B2C302000000000000B001 /* ufbx.c in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F001 /* ufbx.c */; };
+		A1B2C302000000000000B002 /* imgui.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F002 /* imgui.cpp */; };
+		A1B2C302000000000000B003 /* imgui_draw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F003 /* imgui_draw.cpp */; };
+		A1B2C302000000000000B004 /* imgui_tables.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F004 /* imgui_tables.cpp */; };
+		A1B2C302000000000000B005 /* imgui_widgets.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F005 /* imgui_widgets.cpp */; };
+		A1B2C302000000000000B006 /* imgui_impl_metal.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F006 /* imgui_impl_metal.mm */; };
+		A1B2C302000000000000B007 /* imgui_impl_osx.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F007 /* imgui_impl_osx.mm */; };
+		A1B2C302000000000000B008 /* DDSLoader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F008 /* DDSLoader.mm */; };
+		A1B2C304000000000000B001 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C304000000000000F001 /* GameController.framework */; };
+		A1B2C304000000000000B002 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C304000000000000F001 /* GameController.framework */; };
+		A1B2C303000000000000B001 /* ufbx.c in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F001 /* ufbx.c */; };
+		A1B2C303000000000000B002 /* imgui.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F002 /* imgui.cpp */; };
+		A1B2C303000000000000B003 /* imgui_draw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F003 /* imgui_draw.cpp */; };
+		A1B2C303000000000000B004 /* imgui_tables.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F004 /* imgui_tables.cpp */; };
+		A1B2C303000000000000B005 /* imgui_widgets.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F005 /* imgui_widgets.cpp */; };
+		A1B2C303000000000000B006 /* imgui_impl_metal.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F006 /* imgui_impl_metal.mm */; };
+		A1B2C303000000000000B007 /* imgui_impl_osx.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F007 /* imgui_impl_osx.mm */; };
+		A1B2C303000000000000B008 /* DDSLoader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F008 /* DDSLoader.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -80,10 +98,19 @@
 		51F7FFF9209BC3C00017E288 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		51FA2C0E24EDCF0000C94F4E /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/MetalKit.framework; sourceTree = DEVELOPER_DIR; };
 		51FA2C1024EDCF0600C94F4E /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		A1B2C304000000000000F001 /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
 		5236FED32F3FE41000437B09 /* WindowSceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WindowSceneDelegate.h; sourceTree = "<group>"; };
 		5236FED42F3FE41000437B09 /* WindowSceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WindowSceneDelegate.m; sourceTree = "<group>"; };
-		ECCD252A9D8DEF7E2FB2C6DD /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE.txt; sourceTree = "<group>"; };
-		F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */ = {isa = PBXFileReference; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
+		ECCD252A9D8DEF7E2FB2C6DD /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
+		F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = SampleCode.xcconfig; path = Configuration/SampleCode.xcconfig; sourceTree = "<group>"; };
+		A1B2C301000000000000F001 /* ufbx.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ufbx.c; sourceTree = "<group>"; };
+		A1B2C301000000000000F002 /* imgui.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = imgui.cpp; sourceTree = "<group>"; };
+		A1B2C301000000000000F003 /* imgui_draw.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = imgui_draw.cpp; sourceTree = "<group>"; };
+		A1B2C301000000000000F004 /* imgui_tables.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = imgui_tables.cpp; sourceTree = "<group>"; };
+		A1B2C301000000000000F005 /* imgui_widgets.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = imgui_widgets.cpp; sourceTree = "<group>"; };
+		A1B2C301000000000000F006 /* imgui_impl_metal.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = imgui_impl_metal.mm; sourceTree = "<group>"; };
+		A1B2C301000000000000F007 /* imgui_impl_osx.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = imgui_impl_osx.mm; sourceTree = "<group>"; };
+		A1B2C301000000000000F008 /* DDSLoader.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DDSLoader.mm; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +119,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				40C99C39283C6FBA0036DB4D /* MetalKit.framework in Frameworks */,
+				A1B2C304000000000000B001 /* GameController.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,6 +144,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				51FA2C1124EDCF0600C94F4E /* MetalKit.framework in Frameworks */,
+				A1B2C304000000000000B002 /* GameController.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -145,6 +174,10 @@
 				3E9448D520BC6BF0001DD43A /* README.md */,
 				4006793C24995B9A004745BD /* Application */,
 				51E97F682016FC6600D09D13 /* Renderer */,
+				A1B2C304000000000000A001 /* ThirdParty */,
+				A1B2C304000000000000A005 /* Scene */,
+				A1B2C304000000000000A006 /* Import */,
+				A1B2C304000000000000A007 /* GPU */,
 				51E97FA42017014100D09D13 /* Frameworks */,
 				51E97F732016FC6700D09D13 /* Products */,
 				BB4B1E8427F7A25D9521AD5B /* Configuration */,
@@ -221,6 +254,66 @@
 			);
 			name = LICENSE;
 			path = .;
+			sourceTree = "<group>";
+		};
+		A1B2C304000000000000A001 /* ThirdParty */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C304000000000000A002 /* ufbx */,
+				A1B2C304000000000000A003 /* imgui */,
+				A1B2C304000000000000A004 /* dds_loader */,
+			);
+			path = ThirdParty;
+			sourceTree = "<group>";
+		};
+		A1B2C304000000000000A002 /* ufbx */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C301000000000000F001 /* ufbx.c */,
+			);
+			path = ufbx;
+			sourceTree = "<group>";
+		};
+		A1B2C304000000000000A003 /* imgui */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C301000000000000F002 /* imgui.cpp */,
+				A1B2C301000000000000F003 /* imgui_draw.cpp */,
+				A1B2C301000000000000F004 /* imgui_tables.cpp */,
+				A1B2C301000000000000F005 /* imgui_widgets.cpp */,
+				A1B2C301000000000000F006 /* imgui_impl_metal.mm */,
+				A1B2C301000000000000F007 /* imgui_impl_osx.mm */,
+			);
+			path = imgui;
+			sourceTree = "<group>";
+		};
+		A1B2C304000000000000A004 /* dds_loader */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C301000000000000F008 /* DDSLoader.mm */,
+			);
+			path = dds_loader;
+			sourceTree = "<group>";
+		};
+		A1B2C304000000000000A005 /* Scene */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Scene;
+			sourceTree = "<group>";
+		};
+		A1B2C304000000000000A006 /* Import */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Import;
+			sourceTree = "<group>";
+		};
+		A1B2C304000000000000A007 /* GPU */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = GPU;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -303,8 +396,6 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2620;
 				ORGANIZATIONNAME = Apple;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = 51E97F672016FC6600D09D13 /* Build configuration list for PBXProject "SimplePathTracer" */;
 			compatibilityVersion = "Xcode 9.3";
@@ -380,6 +471,14 @@
 				40C99C35283C6FBA0036DB4D /* Scene.mm in Sources */,
 				40C99C36283C6FBA0036DB4D /* main.m in Sources */,
 				40C99C37283C6FBA0036DB4D /* ViewController.mm in Sources */,
+				A1B2C302000000000000B001 /* ufbx.c in Sources */,
+				A1B2C302000000000000B002 /* imgui.cpp in Sources */,
+				A1B2C302000000000000B003 /* imgui_draw.cpp in Sources */,
+				A1B2C302000000000000B004 /* imgui_tables.cpp in Sources */,
+				A1B2C302000000000000B005 /* imgui_widgets.cpp in Sources */,
+				A1B2C302000000000000B006 /* imgui_impl_metal.mm in Sources */,
+				A1B2C302000000000000B007 /* imgui_impl_osx.mm in Sources */,
+				A1B2C302000000000000B008 /* DDSLoader.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -424,6 +523,14 @@
 				51C2956320A81D5500F951BE /* Scene.mm in Sources */,
 				5113DCA424773F1000259320 /* main.m in Sources */,
 				5113DCA824773F1000259320 /* ViewController.mm in Sources */,
+				A1B2C303000000000000B001 /* ufbx.c in Sources */,
+				A1B2C303000000000000B002 /* imgui.cpp in Sources */,
+				A1B2C303000000000000B003 /* imgui_draw.cpp in Sources */,
+				A1B2C303000000000000B004 /* imgui_tables.cpp in Sources */,
+				A1B2C303000000000000B005 /* imgui_widgets.cpp in Sources */,
+				A1B2C303000000000000B006 /* imgui_impl_metal.mm in Sources */,
+				A1B2C303000000000000B007 /* imgui_impl_osx.mm in Sources */,
+				A1B2C303000000000000B008 /* DDSLoader.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -454,17 +561,24 @@
 			baseConfigurationReference = F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "Mac Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Q9UUZYMRPZ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
 					"SUPPORTS_METAL_3=1",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ThirdParty/ufbx",
+					"$(SRCROOT)/ThirdParty/imgui",
+					"$(SRCROOT)/ThirdParty/dds_loader",
+					"$(SRCROOT)/Scene",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -485,14 +599,21 @@
 			baseConfigurationReference = F5AACBC7FA7FF993C2B54D5F /* SampleCode.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "Mac Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Q9UUZYMRPZ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=1";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ThirdParty/ufbx",
+					"$(SRCROOT)/ThirdParty/imgui",
+					"$(SRCROOT)/ThirdParty/dds_loader",
+					"$(SRCROOT)/Scene",
+				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -761,6 +882,13 @@
 					"$(inherited)",
 					"SUPPORTS_METAL_3=0",
 				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ThirdParty/ufbx",
+					"$(SRCROOT)/ThirdParty/imgui",
+					"$(SRCROOT)/ThirdParty/dds_loader",
+					"$(SRCROOT)/Scene",
+				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -789,6 +917,13 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=0";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ThirdParty/ufbx",
+					"$(SRCROOT)/ThirdParty/imgui",
+					"$(SRCROOT)/ThirdParty/dds_loader",
+					"$(SRCROOT)/Scene",
+				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
