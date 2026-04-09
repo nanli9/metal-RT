@@ -597,22 +597,24 @@ kernel void raytracingKernel(
             float lightDistance;
 
             if (bistroMode) {
-                worldSpaceLightDirection = normalize(float3(0.5f, 1.0f, 0.3f));
+                // Sun direction from Euler(-63°, -23.4°, 0)
+                worldSpaceLightDirection = normalize(float3(-0.1803f, 0.8910f, 0.4167f));
                 lightDistance = INFINITY;
 
+                // Sun: sRGB(1.0, 0.87, 0.78), full daylight intensity
+                float3 sunRadiance = float3(1.0f, 0.87f, 0.78f) * 8.0f;
+                // Sky ambient: cool blue fill
+                float3 skyAmbient = float3(0.25f, 0.30f, 0.45f);
+
                 if (uniforms.enablePBR) {
-                    // Full PBR evaluation
-                    float3 sunRadiance = float3(5.0f, 4.8f, 4.2f);
                     float3 V = -ray.direction;
                     lightColor = evaluatePBR(worldSpaceSurfaceNormal, V, worldSpaceLightDirection,
                                             surfaceColor, bistroMetallic, bistroRoughness, sunRadiance);
-                    float3 ambient = surfaceColor * float3(0.3f, 0.35f, 0.5f) * (1.0f - bistroMetallic * 0.5f);
-                    lightColor += ambient;
+                    lightColor += surfaceColor * skyAmbient * (1.0f - bistroMetallic * 0.5f);
                 } else {
-                    // Simple Lambertian (Phase 4 style)
                     float NdotL = saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
-                    lightColor = float3(2.0f, 1.9f, 1.7f) * NdotL;
-                    lightColor += float3(0.3f, 0.35f, 0.5f); // ambient
+                    lightColor = float3(1.0f, 0.87f, 0.78f) * 2.5f * NdotL;
+                    lightColor += skyAmbient;
                 }
             } else {
                 // Choose a random light source to sample.
@@ -646,8 +648,7 @@ kernel void raytracingKernel(
                 i.accept_any_intersection(true);
                 intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW);
 
-                // lightColor already includes albedo from evaluatePBR
-                float3 ambient = surfaceColor * float3(0.3f, 0.35f, 0.5f) * (1.0f - bistroMetallic * 0.5f);
+                float3 ambient = surfaceColor * float3(0.25f, 0.30f, 0.45f) * (1.0f - bistroMetallic * 0.5f);
                 if (intersection.type == intersection_type::none)
                     accumulatedColor += lightColor * color;
                 else

@@ -708,7 +708,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->camera.right = right;
     uniforms->camera.up = up;
 
-    float fieldOfView = 45.0f * (M_PI / 180.0f);
+    float fieldOfView = _useBistroPath ? (M_PI / 3.0f) : (45.0f * (M_PI / 180.0f));
     float aspectRatio = (float)_size.width / (float)_size.height;
     float imagePlaneHeight = tanf(fieldOfView / 2.0f);
     float imagePlaneWidth = aspectRatio * imagePlaneHeight;

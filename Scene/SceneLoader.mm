@@ -92,12 +92,8 @@
     sceneAsset.boundsMin = imported->boundsMin;
     sceneAsset.boundsMax = imported->boundsMax;
 
-    // Set default camera — position it to view the scene from a reasonable angle
-    simd_float3 center = (imported->boundsMin + imported->boundsMax) * 0.5f;
-    simd_float3 extents = imported->boundsMax - imported->boundsMin;
-    float maxExtent = simd_reduce_max(extents);
-    sceneAsset.cameraPosition = center + simd_make_float3(0, maxExtent * 0.3f, maxExtent * 0.6f);
-    sceneAsset.cameraTarget = center;
+    sceneAsset.cameraPosition = simd_make_float3(-10.5f, 1.7f, -1.0f);
+    sceneAsset.cameraTarget = simd_make_float3(0.0f, 3.5f, 0.0f);
 
     NSLog(@"SceneLoader: scene ready — %zu meshes, %zu materials, %zu instances, camera at (%.1f, %.1f, %.1f)",
           sceneAsset.meshes.size(), sceneAsset.materials.count, sceneAsset.instances.size(),
