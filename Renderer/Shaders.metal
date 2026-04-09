@@ -401,11 +401,11 @@ kernel void raytracingKernel(
                                + barycentric_coords.x * uv1
                                + barycentric_coords.y * uv2;
 
-                    // Look up material and get base color
+                    // Look up material
                     constant GPUMaterial &mat = materials[tri.materialIndex];
                     surfaceColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
 
-                    // Texture sampling placeholder — will be added in Phase 5
+                    // Texture sampling will be added in Phase 5 with proper argument buffer setup
 
                 } else if (usePerPrimitiveData) {
                     // Original Cornell box per-primitive path

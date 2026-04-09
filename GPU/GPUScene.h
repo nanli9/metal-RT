@@ -41,6 +41,9 @@ struct MeshGPUInfo {
 // Scene textures (all loaded textures, indexed by materialTextureIndex)
 @property (nonatomic, readonly) NSArray<id<MTLTexture>> *textures;
 
+// Buffer of MTLResourceID values for bindless texture access (Metal 3)
+@property (nonatomic, readonly) id<MTLBuffer> textureResourceIDBuffer;
+
 // Instance data
 @property (nonatomic, readonly) id<MTLBuffer> instanceBuffer;
 @property (nonatomic, readonly) NSUInteger instanceCount;

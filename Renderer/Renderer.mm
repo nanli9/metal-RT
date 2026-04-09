@@ -752,10 +752,6 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
         [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
 
-        // Bind scene textures for material sampling
-        for (NSUInteger i = 0; i < _gpuScene.textures.count; i++)
-            [computeEncoder setTexture:_gpuScene.textures[i] atIndex:3 + i];
-
         // Mark all BLAS as used
         for (id<MTLAccelerationStructure> blas in _gpuScene.primitiveAccelerationStructures)
             [computeEncoder useResource:blas usage:MTLResourceUsageRead];

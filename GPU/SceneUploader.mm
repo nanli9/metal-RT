@@ -152,6 +152,15 @@
 
     NSLog(@"SceneUploader: %lu unique textures collected for GPU", (unsigned long)textureArray.count);
 
+    // Create buffer of MTLResourceID values for bindless texture access
+    id<MTLBuffer> texResIDBuffer = [device newBufferWithLength:MAX(textureArray.count, 1u) * sizeof(MTLResourceID)
+                                                       options:bufferOpts];
+    texResIDBuffer.label = @"Texture Resource IDs";
+    MTLResourceID *resIDs = (MTLResourceID *)texResIDBuffer.contents;
+    for (NSUInteger i = 0; i < textureArray.count; i++) {
+        resIDs[i] = textureArray[i].gpuResourceID;
+    }
+
     // ---- Create instance buffer ----
     id<MTLBuffer> instanceBuf = [device newBufferWithLength:instances.size() * sizeof(MTLAccelerationStructureInstanceDescriptor)
                                                    options:bufferOpts];
@@ -169,6 +178,7 @@
     [gpuScene setMaterialBuffer:materialBuf];
     [gpuScene setMaterialCount:materials.count];
     [gpuScene setTextures:textureArray];
+    [gpuScene setTextureResourceIDBuffer:texResIDBuffer];
     [gpuScene setInstanceBuffer:instanceBuf];
     [gpuScene setInstanceCount:instances.size()];
     [gpuScene setMeshInfos:std::move(meshInfos)];

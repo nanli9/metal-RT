@@ -14,6 +14,7 @@
 - (void)setMaterialBuffer:(id<MTLBuffer>)buf;
 - (void)setMaterialCount:(NSUInteger)count;
 - (void)setTextures:(NSArray<id<MTLTexture>> *)textures;
+- (void)setTextureResourceIDBuffer:(id<MTLBuffer>)buf;
 - (void)setInstanceBuffer:(id<MTLBuffer>)buf;
 - (void)setInstanceCount:(NSUInteger)count;
 - (void)setPrimitiveAccelerationStructures:(NSArray<id<MTLAccelerationStructure>> *)arr;
