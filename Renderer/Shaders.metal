@@ -415,6 +415,8 @@ kernel void raytracingKernel(
         float dbgNdotL = 0.0f;
         float dbgShadow = 1.0f;
         bool dbgHit = false;
+        float3 dbgBaseColorFactor = 0.0f;
+        float3 dbgTexIndices = 0.0f; // R=hasBase, G=hasNormal, B=hasSpecular
 
         // Create an intersector to test for intersection between the ray and the geometry in the scene.
         intersector<triangle_data, instancing> i;
@@ -615,6 +617,12 @@ kernel void raytracingKernel(
                 if (mask & GEOMETRY_MASK_TRIANGLE) {
                     const device GPUTriangleData &dbgTri = *(const device GPUTriangleData*)intersection.primitive_data;
                     dbgMaterialId = dbgTri.materialIndex;
+                    constant GPUMaterial &dbgMat = materials[dbgTri.materialIndex];
+                    dbgBaseColorFactor = float3(dbgMat.baseColorFactor[0], dbgMat.baseColorFactor[1], dbgMat.baseColorFactor[2]);
+                    dbgTexIndices = float3(
+                        dbgMat.baseColorTextureIndex != 0xFFFFFFFF ? 1.0f : 0.0f,
+                        dbgMat.normalTextureIndex != 0xFFFFFFFF ? 1.0f : 0.0f,
+                        dbgMat.specularTextureIndex != 0xFFFFFFFF ? 1.0f : 0.0f);
                 }
             }
 
@@ -736,6 +744,15 @@ kernel void raytracingKernel(
                 case 6: accumulatedColor = float3(dbgNdotL); break;                                                // NdotL (no shadow)
                 case 7: accumulatedColor = float3(dbgShadow); break;                                              // Shadow visibility
                 case 8: accumulatedColor = fract(float(dbgInstanceId) * float3(0.17f, 0.63f, 0.41f)); break;      // Instance ID
+                case 9: accumulatedColor = float3(1.0f, 0.0f, 0.0f); break;                                       // Hardcoded red (path test)
+                case 10: accumulatedColor = dbgBaseColorFactor; break;                                             // baseColorFactor only
+                case 11: { // Lambert: baseColorFactor * NdotL, no shadow, no PBR
+                    float3 L = normalize(float3(-0.1803f, 0.8910f, 0.4167f));
+                    float ndl = saturate(dot(dbgWorldNormal, L));
+                    accumulatedColor = dbgBaseColorFactor * ndl + dbgBaseColorFactor * 0.15f;
+                    break;
+                }
+                case 12: accumulatedColor = dbgTexIndices; break;                                                  // Texture presence (R=base,G=norm,B=spec)
                 default: break;
             }
         }

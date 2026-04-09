@@ -184,10 +184,11 @@ The implementation of the cross-platform view controller.
 
         const char *debugItems[] = {
             "Off", "Primitive ID", "Material ID", "Barycentrics",
-            "Base Color", "Normals", "NdotL", "Shadow", "Instance ID"
+            "Base Color", "Normals", "NdotL", "Shadow", "Instance ID",
+            "Hardcoded Red", "BaseColorFactor", "Lambert (no tex)", "Tex Presence"
         };
         int debugMode = _renderer.debugMode;
-        if (ImGui::Combo("Debug View", &debugMode, debugItems, 9)) {
+        if (ImGui::Combo("Debug View", &debugMode, debugItems, 13)) {
             _renderer.debugMode = debugMode;
             [_renderer resetAccumulation];
         }
