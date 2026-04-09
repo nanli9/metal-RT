@@ -19,6 +19,29 @@ The implementation of the cross-platform view controller.
     Renderer *_renderer;
 }
 
+/// Parse command-line arguments to determine which scene to load.
+/// Returns nil for Cornell box, or an FBX path string.
+- (NSString *)scenePathFromArguments
+{
+    NSArray<NSString *> *args = [NSProcessInfo processInfo].arguments;
+
+    // Skip argv[0] (executable path). Look for the first non-flag argument.
+    for (NSUInteger i = 1; i < args.count; i++) {
+        NSString *arg = args[i];
+        if ([arg hasPrefix:@"-"]) continue; // skip flags like -NSDocumentRevisionsDebugMode
+
+        // "cornell-box" (case-insensitive) means use Cornell box
+        if ([arg caseInsensitiveCompare:@"cornell-box"] == NSOrderedSame)
+            return nil;
+
+        // Anything else is treated as an FBX path
+        return arg;
+    }
+
+    // No scene argument — default to Cornell box
+    return nil;
+}
+
 - (void)viewDidLoad
 {
     [super viewDidLoad];
@@ -56,58 +79,44 @@ The implementation of the cross-platform view controller.
 #endif
     _view.colorPixelFormat = MTLPixelFormatRGBA16Float;
 
-    // Try to load Bistro scene, fall back to Cornell box.
-    // Search for Bistro_v5_2/ in several locations:
-    // 1. Alongside the .xcodeproj (SOURCE_ROOT set by Xcode)
-    // 2. Walking up from the executable (DerivedData runs)
-    // 3. Hardcoded known project path
-    NSString *bistroPath = nil;
-    NSArray<NSString *> *searchRoots = @[
-        // Xcode sets this environment variable to the project source root
-        [[NSProcessInfo processInfo].environment[@"__XCODE_BUILT_PRODUCTS_DIR_PATHS"] stringByDeletingLastPathComponent] ?: @"",
-        // Walk up from executable
-        [[[NSProcessInfo processInfo].arguments[0] stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"../.."],
-        // Known project location
-        @"/Users/nan/Desktop/AcceleratingRayTracingUsingMetal",
-    ];
+    NSString *fbxPath = [self scenePathFromArguments];
 
-    for (NSString *root in searchRoots) {
-        if (root.length == 0) continue;
-        NSString *candidate = [[root stringByStandardizingPath]
-                               stringByAppendingPathComponent:@"Bistro_v5_2/BistroExterior.fbx"];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:candidate]) {
-            bistroPath = candidate;
-            break;
+    if (fbxPath) {
+        // Resolve relative paths
+        if (![fbxPath hasPrefix:@"/"]) {
+            NSString *cwd = [[NSFileManager defaultManager] currentDirectoryPath];
+            fbxPath = [[cwd stringByAppendingPathComponent:fbxPath] stringByStandardizingPath];
         }
-    }
 
-    if (bistroPath) {
-        NSLog(@"Loading Bistro scene from %@", bistroPath);
+        if ([[NSFileManager defaultManager] fileExistsAtPath:fbxPath]) {
+            NSLog(@"Loading scene from %@", fbxPath);
 
-        NSError *error = nil;
-        SceneAsset *sceneAsset = [SceneLoader loadSceneFromFBX:bistroPath
-                                                        device:_view.device
-                                                         error:&error];
-        if (sceneAsset) {
-            GPUScene *gpuScene = [[GPUScene alloc] init];
-            [SceneUploader uploadScene:sceneAsset toGPUScene:gpuScene device:_view.device];
+            NSError *error = nil;
+            SceneAsset *sceneAsset = [SceneLoader loadSceneFromFBX:fbxPath
+                                                            device:_view.device
+                                                             error:&error];
+            if (sceneAsset) {
+                GPUScene *gpuScene = [[GPUScene alloc] init];
+                [SceneUploader uploadScene:sceneAsset toGPUScene:gpuScene device:_view.device];
 
-            id<MTLCommandQueue> queue = [_view.device newCommandQueue];
-            [AccelerationStructureBuilder buildAccelerationStructuresForGPUScene:gpuScene
-                                                                     sceneAsset:sceneAsset
-                                                                         device:_view.device
-                                                                          queue:queue];
+                id<MTLCommandQueue> queue = [_view.device newCommandQueue];
+                [AccelerationStructureBuilder buildAccelerationStructuresForGPUScene:gpuScene
+                                                                         sceneAsset:sceneAsset
+                                                                             device:_view.device
+                                                                              queue:queue];
 
-            _renderer = [[Renderer alloc] initWithDevice:_view.device
-                                                gpuScene:gpuScene
-                                              sceneAsset:sceneAsset];
+                _renderer = [[Renderer alloc] initWithDevice:_view.device
+                                                    gpuScene:gpuScene
+                                                  sceneAsset:sceneAsset];
+            } else {
+                NSLog(@"Failed to load scene: %@. Falling back to Cornell box.", error.localizedDescription);
+            }
         } else {
-            NSLog(@"Failed to load Bistro: %@. Falling back to Cornell box.", error.localizedDescription);
+            NSLog(@"FBX file not found: %@. Falling back to Cornell box.", fbxPath);
         }
     }
 
     if (!_renderer) {
-        // Fallback: Cornell box
         NSLog(@"Using Cornell box scene");
         Scene *scene = [Scene newInstancedCornellBoxSceneWithDevice:_view.device
                                             useIntersectionFunctions:YES];

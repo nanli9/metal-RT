@@ -1,9 +1,17 @@
 #!/bin/bash
-# Build and run the Metal ray tracer, or run tests.
+# Build and run the Metal ray tracer.
+#
 # Usage:
-#   ./run.sh              — build and run the app, console output -> log.txt
-#   ./run.sh test-import  — build and run the FBX import test, output -> log.txt
-#   ./run.sh test-scene   — build and run the full scene loading test, output -> log.txt
+#   ./run.sh                                — Cornell box (default)
+#   ./run.sh cornell-box                    — Cornell box (explicit)
+#   ./run.sh path/to/scene.fbx             — load FBX scene
+#   ./run.sh Bistro_v5_2/BistroExterior.fbx — load Bistro
+#   ./run.sh test-import [path.fbx]         — FBX import test -> log.txt
+#   ./run.sh test-scene  [path.fbx]         — scene loading test -> log.txt
+#   ./run.sh test-gpu    [path.fbx]         — GPU upload + AS test -> log.txt
+#
+# All output goes to log.txt.
+
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -78,10 +86,28 @@ else
     fi
 
     EXE="$APP/Contents/MacOS/SimplePathTracer-Metal3"
-    echo "Running $EXE"
+
+    # Determine scene argument: no arg or "cornell-box" (case-insensitive) = Cornell box
+    SCENE_ARG="${1:-cornell-box}"
+
+    # Resolve relative FBX paths to absolute
+    if echo "$SCENE_ARG" | grep -iq "^cornell-box$"; then
+        echo "Running with Cornell box scene"
+        SCENE_ARG="cornell-box"
+    else
+        # Make path absolute if relative
+        if [[ "$SCENE_ARG" != /* ]]; then
+            SCENE_ARG="$SCRIPT_DIR/$SCENE_ARG"
+        fi
+        if [ ! -f "$SCENE_ARG" ]; then
+            echo "ERROR: FBX file not found: $SCENE_ARG"
+            exit 1
+        fi
+        echo "Running with scene: $SCENE_ARG"
+    fi
+
     echo "Console output -> log.txt"
     echo "---"
 
-    # Run the app, capturing stderr (NSLog) to log.txt while also showing it
-    "$EXE" 2>&1 | tee log.txt
+    "$EXE" "$SCENE_ARG" 2>&1 | tee log.txt
 fi
