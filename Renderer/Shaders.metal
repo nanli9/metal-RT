@@ -359,7 +359,8 @@ kernel void raytracingKernel(
      instance_acceleration_structure                        accelerationStructure     [[buffer(4)]],
      intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]],
      constant GPUMaterial                                  *materials                 [[buffer(6), function_constant(bistroMode)]],
-     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]]
+     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]],
+     texture2d<float>                                       debugDirectTex            [[texture(3), function_constant(bistroMode)]]
 )
 {
     // The sample aligns the thread count to the threadgroup size, which means the thread count
@@ -753,6 +754,16 @@ kernel void raytracingKernel(
                     break;
                 }
                 case 12: accumulatedColor = dbgTexIndices; break;                                                  // Texture presence (R=base,G=norm,B=spec)
+                case 13: { // Direct texture sample — bypasses argument buffer, samples texture slot 3
+                    float2 uv0 = float2(dbgBarycentrics.x, dbgBarycentrics.y); // use barycentrics as UV for test
+                    accumulatedColor = debugDirectTex.sample(texSampler, uv0).rgb;
+                    break;
+                }
+                case 14: { // Argument buffer texture[0] sample — tests if argbuf works
+                    float2 uv0 = float2(dbgBarycentrics.x, dbgBarycentrics.y);
+                    accumulatedColor = sceneTexArgBuf.textures[0].sample(texSampler, uv0).rgb;
+                    break;
+                }
                 default: break;
             }
         }
