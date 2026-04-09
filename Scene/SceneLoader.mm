@@ -92,8 +92,8 @@
     sceneAsset.boundsMin = imported->boundsMin;
     sceneAsset.boundsMax = imported->boundsMax;
 
-    sceneAsset.cameraPosition = simd_make_float3(-10.5f, 1.7f, -1.0f);
-    sceneAsset.cameraTarget = simd_make_float3(0.0f, 3.5f, 0.0f);
+    sceneAsset.cameraPosition = simd_make_float3(-12.34f, 5.94f, 1.67f);
+    sceneAsset.cameraTarget = simd_make_float3(-11.48f, 5.50f, 1.41f);
 
     NSLog(@"SceneLoader: scene ready — %zu meshes, %zu materials, %zu instances, camera at (%.1f, %.1f, %.1f)",
           sceneAsset.meshes.size(), sceneAsset.materials.count, sceneAsset.instances.size(),

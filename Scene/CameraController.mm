@@ -11,7 +11,7 @@
     self = [super init];
     if (self) {
         _position = position;
-        _moveSpeed = 10.0f;
+        _moveSpeed = 8.0f;
         _lookSensitivity = 0.003f;
         memset(_keys, 0, sizeof(_keys));
 
