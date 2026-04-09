@@ -574,28 +574,30 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
 - (void)createTextureArgBuffer {
     NSArray<id<MTLTexture>> *textures = _gpuScene.textures;
-    NSUInteger texCount = MAX(textures.count, 1u);
+    if (textures.count == 0) return;
 
-    // Each texture entry is a gpuResourceID (uint64_t)
-    NSUInteger argBufSize = sizeof(uint64_t) * texCount;
+    // Use MTLArgumentEncoder to properly encode textures into the argument buffer.
+    // Get the encoder from the kernel function's buffer(7) binding.
+    id<MTLFunction> kernelFn = [_library newFunctionWithName:@"raytracingKernel"
+                                              constantValues:[self bistroPipelineConstants]
+                                                       error:nil];
+    id<MTLArgumentEncoder> encoder = [kernelFn newArgumentEncoderWithBufferIndex:7];
+
+    NSUInteger argBufSize = encoder.encodedLength;
     _textureArgBuffer = [_device newBufferWithLength:argBufSize options:MTLResourceStorageModeShared];
     _textureArgBuffer.label = @"Texture Argument Buffer";
 
-    uint64_t *entries = (uint64_t *)_textureArgBuffer.contents;
+    [encoder setArgumentBuffer:_textureArgBuffer offset:0];
     for (NSUInteger i = 0; i < textures.count; i++) {
-        MTLResourceID resID = textures[i].gpuResourceID;
-        entries[i] = resID._impl;
+        [encoder setTexture:textures[i] atIndex:i];
     }
 
-    NSLog(@"Renderer: created texture argument buffer for %lu textures", (unsigned long)textures.count);
+    NSLog(@"Renderer: created texture argument buffer — %lu textures, %lu bytes",
+          (unsigned long)textures.count, (unsigned long)argBufSize);
 }
 
 
-- (void)createBistroPipelines {
-    _useIntersectionFunctions = false;
-    _usePerPrimitiveData = true;
-    _resourcesStride = 0;
-
+- (MTLFunctionConstantValues *)bistroPipelineConstants {
     MTLFunctionConstantValues *constants = [[MTLFunctionConstantValues alloc] init];
     uint32_t resourcesStride = 0;
     [constants setConstantValue:&resourcesStride type:MTLDataTypeUInt atIndex:0];
@@ -603,12 +605,19 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     [constants setConstantValue:&noIntersectionFunctions type:MTLDataTypeBool atIndex:1];
     bool perPrimitiveData = true;
     [constants setConstantValue:&perPrimitiveData type:MTLDataTypeBool atIndex:2];
-    bool bistroMode = true;
-    [constants setConstantValue:&bistroMode type:MTLDataTypeBool atIndex:3];
+    bool bMode = true;
+    [constants setConstantValue:&bMode type:MTLDataTypeBool atIndex:3];
+    return constants;
+}
+
+- (void)createBistroPipelines {
+    _useIntersectionFunctions = false;
+    _usePerPrimitiveData = true;
+    _resourcesStride = 0;
 
     NSError *error;
     id<MTLFunction> raytracingFunction = [_library newFunctionWithName:@"raytracingKernel"
-                                                        constantValues:constants
+                                                        constantValues:[self bistroPipelineConstants]
                                                                  error:&error];
     NSAssert(raytracingFunction, @"Failed to create bistro raytracing function: %@", error);
 
