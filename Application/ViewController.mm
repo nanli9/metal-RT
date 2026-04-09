@@ -191,6 +191,19 @@ The implementation of the cross-platform view controller.
             _renderer.debugMode = debugMode;
             [_renderer resetAccumulation];
         }
+
+        if (_cameraController) {
+            ImGui::Separator();
+            ImGui::Text("Camera");
+            simd_float3 pos = _cameraController.position;
+            simd_float3 tgt = [_cameraController target];
+            float yawDeg = _cameraController.yaw * (180.0f / M_PI);
+            float pitchDeg = _cameraController.pitch * (180.0f / M_PI);
+            ImGui::Text("Pos:   (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
+            ImGui::Text("Target:(%.2f, %.2f, %.2f)", tgt.x, tgt.y, tgt.z);
+            ImGui::Text("Yaw: %.1f  Pitch: %.1f", yawDeg, pitchDeg);
+            ImGui::Text("Speed: %.1f", _cameraController.moveSpeed);
+        }
         ImGui::End();
 
         id<MTLCommandBuffer> cmdBuf = [_renderer.commandQueue commandBuffer];
