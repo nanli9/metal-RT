@@ -87,6 +87,8 @@
 		A1B2C307000000000000B011 /* GPUScene.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F001 /* GPUScene.mm */; };
 		A1B2C307000000000000B012 /* SceneUploader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F002 /* SceneUploader.mm */; };
 		A1B2C307000000000000B013 /* AccelerationStructureBuilder.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */; };
+		A1B2C308000000000000B001 /* CameraController.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C308000000000000F001 /* CameraController.mm */; };
+		A1B2C308000000000000B002 /* CameraController.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C308000000000000F001 /* CameraController.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -138,6 +140,7 @@
 		A1B2C307000000000000F001 /* GPUScene.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = GPUScene.mm; sourceTree = "<group>"; };
 		A1B2C307000000000000F002 /* SceneUploader.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneUploader.mm; sourceTree = "<group>"; };
 		A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AccelerationStructureBuilder.mm; sourceTree = "<group>"; };
+		A1B2C308000000000000F001 /* CameraController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "Scene/CameraController.mm"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -330,6 +333,7 @@
 				A1B2C306000000000000F003 /* MaterialAsset.mm */,
 				A1B2C306000000000000F004 /* SceneAsset.mm */,
 				A1B2C306000000000000F005 /* SceneLoader.mm */,
+				A1B2C308000000000000F001 /* CameraController.mm */,
 			);
 			path = Scene;
 			sourceTree = "<group>";
@@ -524,6 +528,7 @@
 				A1B2C307000000000000B001 /* GPUScene.mm in Sources */,
 				A1B2C307000000000000B002 /* SceneUploader.mm in Sources */,
 				A1B2C307000000000000B003 /* AccelerationStructureBuilder.mm in Sources */,
+				A1B2C308000000000000B001 /* CameraController.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -585,6 +590,7 @@
 				A1B2C307000000000000B011 /* GPUScene.mm in Sources */,
 				A1B2C307000000000000B012 /* SceneUploader.mm in Sources */,
 				A1B2C307000000000000B013 /* AccelerationStructureBuilder.mm in Sources */,
+				A1B2C308000000000000B002 /* CameraController.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

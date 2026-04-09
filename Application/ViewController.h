@@ -15,9 +15,9 @@ The header for the cross-platform view controller.
 #endif
 
 #if !TARGET_OS_IPHONE
-@interface ViewController : NSViewController
+@interface ViewController : NSViewController <MTKViewDelegate>
 #else
-@interface ViewController : UIViewController
+@interface ViewController : UIViewController <MTKViewDelegate>
 #endif
 
 @end

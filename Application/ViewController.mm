@@ -11,12 +11,14 @@ The implementation of the cross-platform view controller.
 #import "GPUScene.h"
 #import "SceneUploader.h"
 #import "AccelerationStructureBuilder.h"
+#import "CameraController.h"
 
 @implementation ViewController
 {
     MTKView *_view;
-
     Renderer *_renderer;
+    CameraController *_cameraController;
+    NSDate *_lastFrameTime;
 }
 
 /// Parse command-line arguments to determine which scene to load.
@@ -25,20 +27,16 @@ The implementation of the cross-platform view controller.
 {
     NSArray<NSString *> *args = [NSProcessInfo processInfo].arguments;
 
-    // Skip argv[0] (executable path). Look for the first non-flag argument.
     for (NSUInteger i = 1; i < args.count; i++) {
         NSString *arg = args[i];
-        if ([arg hasPrefix:@"-"]) continue; // skip flags like -NSDocumentRevisionsDebugMode
+        if ([arg hasPrefix:@"-"]) continue;
 
-        // "cornell-box" (case-insensitive) means use Cornell box
         if ([arg caseInsensitiveCompare:@"cornell-box"] == NSOrderedSame)
             return nil;
 
-        // Anything else is treated as an FBX path
         return arg;
     }
 
-    // No scene argument — default to Cornell box
     return nil;
 }
 
@@ -52,25 +50,17 @@ The implementation of the cross-platform view controller.
     _view.device = MTLCreateSystemDefaultDevice();
 #else
     NSArray<id<MTLDevice>> *devices = MTLCopyAllDevices();
-
     id<MTLDevice> selectedDevice;
-
-    for(id<MTLDevice> device in devices)
-    {
-        if(device.supportsRaytracing)
-        {
-            if(!selectedDevice || !device.isLowPower)
-            {
+    for (id<MTLDevice> device in devices) {
+        if (device.supportsRaytracing) {
+            if (!selectedDevice || !device.isLowPower)
                 selectedDevice = device;
-            }
         }
     }
     _view.device = selectedDevice;
-
     NSLog(@"Selected Device: %@", _view.device.name);
 #endif
 
-    // Device must support Metal and ray tracing.
     NSAssert(_view.device && _view.device.supportsRaytracing,
              @"Ray tracing isn't supported on this device");
 
@@ -82,15 +72,13 @@ The implementation of the cross-platform view controller.
     NSString *fbxPath = [self scenePathFromArguments];
 
     if (fbxPath) {
-        // Resolve relative paths
-        if (![fbxPath hasPrefix:@"/"]) {
+        if (![fbxPath hasPrefix:@"/"])  {
             NSString *cwd = [[NSFileManager defaultManager] currentDirectoryPath];
             fbxPath = [[cwd stringByAppendingPathComponent:fbxPath] stringByStandardizingPath];
         }
 
         if ([[NSFileManager defaultManager] fileExistsAtPath:fbxPath]) {
             NSLog(@"Loading scene from %@", fbxPath);
-
             NSError *error = nil;
             SceneAsset *sceneAsset = [SceneLoader loadSceneFromFBX:fbxPath
                                                             device:_view.device
@@ -108,6 +96,11 @@ The implementation of the cross-platform view controller.
                 _renderer = [[Renderer alloc] initWithDevice:_view.device
                                                     gpuScene:gpuScene
                                                   sceneAsset:sceneAsset];
+
+                // Create camera controller from scene default camera
+                _cameraController = [[CameraController alloc]
+                    initWithPosition:sceneAsset.cameraPosition
+                              target:sceneAsset.cameraTarget];
             } else {
                 NSLog(@"Failed to load scene: %@. Falling back to Cornell box.", error.localizedDescription);
             }
@@ -124,8 +117,75 @@ The implementation of the cross-platform view controller.
     }
 
     [_renderer mtkView:_view drawableSizeWillChange:_view.bounds.size];
-
-    _view.delegate = _renderer;
+    _view.delegate = self;
+    _lastFrameTime = [NSDate date];
 }
+
+#pragma mark - MTKViewDelegate forwarding + camera update
+
+- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size {
+    [_renderer mtkView:view drawableSizeWillChange:size];
+}
+
+- (void)drawInMTKView:(MTKView *)view {
+    if (_cameraController) {
+        NSDate *now = [NSDate date];
+        float dt = (float)[now timeIntervalSinceDate:_lastFrameTime];
+        _lastFrameTime = now;
+        dt = fminf(dt, 0.1f); // cap to avoid huge jumps
+
+        [_cameraController updateWithDeltaTime:dt];
+
+        // Push camera to renderer
+        _renderer.cameraPosition = _cameraController.position;
+        _renderer.cameraTarget = [_cameraController target];
+
+        if ([_cameraController consumeDidMove])
+            [_renderer resetAccumulation];
+    }
+
+    [_renderer drawInMTKView:view];
+}
+
+#pragma mark - macOS input events
+
+#if !TARGET_OS_IPHONE
+
+- (BOOL)acceptsFirstResponder { return YES; }
+
+// Need to accept first mouse so clicks in window work even if not focused
+- (BOOL)becomeFirstResponder { return YES; }
+
+- (void)viewDidAppear {
+    [super viewDidAppear];
+    [self.view.window makeFirstResponder:self];
+}
+
+- (void)keyDown:(NSEvent *)event {
+    if (_cameraController)
+        [_cameraController keyDown:event.keyCode];
+}
+
+- (void)keyUp:(NSEvent *)event {
+    if (_cameraController)
+        [_cameraController keyUp:event.keyCode];
+}
+
+- (void)mouseDragged:(NSEvent *)event {
+    if (_cameraController)
+        [_cameraController mouseMovedDeltaX:(float)event.deltaX deltaY:(float)event.deltaY];
+}
+
+- (void)rightMouseDragged:(NSEvent *)event {
+    if (_cameraController)
+        [_cameraController mouseMovedDeltaX:(float)event.deltaX deltaY:(float)event.deltaY];
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+    if (_cameraController)
+        [_cameraController scrollWheelDeltaY:(float)event.deltaY];
+}
+
+#endif
 
 @end

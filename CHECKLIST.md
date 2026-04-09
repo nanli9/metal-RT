@@ -80,10 +80,10 @@ _Goal: See textured Bistro geometry on screen._
 ## Phase 5: Camera Controls
 _Goal: Navigate through Bistro interactively._
 
-- [ ] **5.1** Write `Scene/CameraController.h/mm` — WASD + mouse look, produces Camera struct per frame
-- [ ] **5.2** Forward keyboard/mouse events from ViewController to CameraController
-- [ ] **5.3** Renderer reads Camera from CameraController each frame, resets `_frameIndex = 0` on camera move
-- [ ] **5.4** Test: navigate through Bistro, accumulation restarts on movement
+- [x] **5.1** Write `Scene/CameraController.h/mm` — WASD + mouse look, produces Camera struct per frame
+- [x] **5.2** Forward keyboard/mouse events from ViewController to CameraController
+- [x] **5.3** Renderer reads Camera from CameraController each frame, resets `_frameIndex = 0` on camera move
+- [x] **5.4** Test: navigate through Bistro, accumulation restarts on movement
 
 **STOP — wait for user review before starting Phase 6.**
 
