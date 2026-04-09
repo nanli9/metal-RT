@@ -405,6 +405,17 @@ kernel void raytracingKernel(
 
         float3 accumulatedColor = float3(0.0f, 0.0f, 0.0f);
 
+        // Debug data captured from first bounce
+        float3 dbgSurfaceColor = 0.0f;
+        float3 dbgWorldNormal = 0.0f;
+        float3 dbgBarycentrics = 0.0f;
+        uint dbgPrimitiveId = 0;
+        uint dbgMaterialId = 0;
+        uint dbgInstanceId = 0;
+        float dbgNdotL = 0.0f;
+        float dbgShadow = 1.0f;
+        bool dbgHit = false;
+
         // Create an intersector to test for intersection between the ray and the geometry in the scene.
         intersector<triangle_data, instancing> i;
 
@@ -592,6 +603,21 @@ kernel void raytracingKernel(
                 surfaceColor = sphere.color;
             }
 
+            // Capture debug data on first bounce
+            if (bounce == 0 && bistroMode) {
+                dbgHit = true;
+                dbgSurfaceColor = surfaceColor;
+                dbgWorldNormal = worldSpaceSurfaceNormal;
+                dbgBarycentrics = float3(1.0f - barycentric_coords.x - barycentric_coords.y,
+                                        barycentric_coords.x, barycentric_coords.y);
+                dbgPrimitiveId = primitiveIndex;
+                dbgInstanceId = instanceIndex;
+                if (mask & GEOMETRY_MASK_TRIANGLE) {
+                    const device GPUTriangleData &dbgTri = *(const device GPUTriangleData*)intersection.primitive_data;
+                    dbgMaterialId = dbgTri.materialIndex;
+                }
+            }
+
             float3 worldSpaceLightDirection;
             float3 lightColor;
             float lightDistance;
@@ -649,10 +675,16 @@ kernel void raytracingKernel(
                 intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW);
 
                 float3 ambient = surfaceColor * float3(0.25f, 0.30f, 0.45f) * (1.0f - bistroMetallic * 0.5f);
-                if (intersection.type == intersection_type::none)
+                bool inShadow = (intersection.type != intersection_type::none);
+                if (!inShadow)
                     accumulatedColor += lightColor * color;
                 else
                     accumulatedColor += ambient * color; // shadow: ambient only
+
+                if (bounce == 0) {
+                    dbgShadow = inShadow ? 0.0f : 1.0f;
+                    dbgNdotL = saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
+                }
 
                 // Attenuate for next bounce (diffuse-like)
                 color *= surfaceColor;
@@ -691,6 +723,21 @@ kernel void raytracingKernel(
 
             ray.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
             ray.direction = worldSpaceSampleDirection;
+        }
+
+        // Debug mode overrides
+        if (bistroMode && uniforms.debugMode > 0 && dbgHit) {
+            switch (uniforms.debugMode) {
+                case 1: accumulatedColor = fract(float(dbgPrimitiveId) * float3(0.123f, 0.456f, 0.789f)); break; // Primitive ID
+                case 2: accumulatedColor = fract(float(dbgMaterialId) * float3(0.31f, 0.57f, 0.91f)); break;     // Material ID
+                case 3: accumulatedColor = dbgBarycentrics; break;                                                 // Barycentrics
+                case 4: accumulatedColor = dbgSurfaceColor; break;                                                 // Base color (no lighting)
+                case 5: accumulatedColor = dbgWorldNormal * 0.5f + 0.5f; break;                                    // World normal
+                case 6: accumulatedColor = float3(dbgNdotL); break;                                                // NdotL (no shadow)
+                case 7: accumulatedColor = float3(dbgShadow); break;                                              // Shadow visibility
+                case 8: accumulatedColor = fract(float(dbgInstanceId) * float3(0.17f, 0.63f, 0.41f)); break;      // Instance ID
+                default: break;
+            }
         }
 
         // Average this frame's sample with all of the previous frames.

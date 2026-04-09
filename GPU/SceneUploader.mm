@@ -73,9 +73,10 @@
         memcpy(uvPtr  + info.vertexOffset, mesh.uvs.data(),       mesh.uvs.size() * sizeof(simd_float2));
         memcpy(tanPtr + info.vertexOffset, mesh.tangents.data(),  mesh.tangents.size() * sizeof(simd_float4));
 
-        // Offset indices by the mesh's vertex offset
+        // Indices are mesh-local (0-based). Metal adds vertexBufferOffset automatically
+        // when building the acceleration structure, so do NOT add vertexOffset here.
         for (size_t i = 0; i < mesh.indices.size(); i++) {
-            idxPtr[info.indexOffset + i] = mesh.indices[i] + info.vertexOffset;
+            idxPtr[info.indexOffset + i] = mesh.indices[i];
         }
     }
 

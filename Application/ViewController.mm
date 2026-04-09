@@ -181,6 +181,16 @@ The implementation of the cross-platform view controller.
             _renderer.enablePBR = pbr;
             [_renderer resetAccumulation];
         }
+
+        const char *debugItems[] = {
+            "Off", "Primitive ID", "Material ID", "Barycentrics",
+            "Base Color", "Normals", "NdotL", "Shadow", "Instance ID"
+        };
+        int debugMode = _renderer.debugMode;
+        if (ImGui::Combo("Debug View", &debugMode, debugItems, 9)) {
+            _renderer.debugMode = debugMode;
+            [_renderer resetAccumulation];
+        }
         ImGui::End();
 
         id<MTLCommandBuffer> cmdBuf = [_renderer.commandQueue commandBuffer];

@@ -723,6 +723,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     uniforms->lightCount = _useBistroPath ? 0 : (unsigned int)_scene.lightCount;
     uniforms->enablePBR = _enablePBR ? 1 : 0;
+    uniforms->debugMode = (unsigned int)_debugMode;
 
 #if !TARGET_OS_IPHONE
     [_uniformBuffer didModifyRange:NSMakeRange(_uniformBufferOffset, alignedUniformsSize)];
