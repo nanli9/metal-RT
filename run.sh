@@ -13,7 +13,7 @@ SCHEME="macOS - Metal3 - SimplePathTracer"
 PROJECT="SimplePathTracer.xcodeproj"
 
 COMMON_SRCS="Import/SceneImporter.mm ThirdParty/ufbx/ufbx.c"
-COMMON_FLAGS="-std=c++17 -fobjc-arc -O1 -I ThirdParty/ufbx -I ThirdParty/dds_loader -I Import -I Scene"
+COMMON_FLAGS="-std=c++17 -fobjc-arc -O1 -I ThirdParty/ufbx -I ThirdParty/dds_loader -I Import -I Scene -I Renderer -I GPU"
 
 if [ "$1" = "test-import" ]; then
     echo "Building FBX import test..."
@@ -28,6 +28,22 @@ if [ "$1" = "test-import" ]; then
     echo "Console output -> log.txt"
     echo "---"
     Tools/build/test_import "$FBX_PATH" 2>&1 | tee log.txt
+
+elif [ "$1" = "test-gpu" ]; then
+    echo "Building GPU upload + AS test..."
+    mkdir -p Tools/build
+    SCENE_SRCS="Scene/TextureAsset.mm Scene/TextureCache.mm Scene/MaterialAsset.mm Scene/SceneAsset.mm Scene/SceneLoader.mm ThirdParty/dds_loader/DDSLoader.mm"
+    GPU_SRCS="GPU/GPUScene.mm GPU/SceneUploader.mm GPU/AccelerationStructureBuilder.mm"
+    clang++ $COMMON_FLAGS -I GPU \
+        Tools/test_gpu.mm $COMMON_SRCS $SCENE_SRCS $GPU_SRCS \
+        -framework Foundation -framework Metal -framework MetalKit \
+        -o Tools/build/test_gpu 2>&1
+
+    FBX_PATH="${2:-$SCRIPT_DIR/Bistro_v5_2/BistroExterior.fbx}"
+    echo "Running GPU test on $FBX_PATH"
+    echo "Console output -> log.txt"
+    echo "---"
+    Tools/build/test_gpu "$FBX_PATH" 2>&1 | tee log.txt
 
 elif [ "$1" = "test-scene" ]; then
     echo "Building scene loading test..."

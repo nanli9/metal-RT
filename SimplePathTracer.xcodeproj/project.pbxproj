@@ -81,6 +81,12 @@
 		A1B2C306000000000000B013 /* MaterialAsset.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F003 /* MaterialAsset.mm */; };
 		A1B2C306000000000000B014 /* SceneAsset.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F004 /* SceneAsset.mm */; };
 		A1B2C306000000000000B015 /* SceneLoader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F005 /* SceneLoader.mm */; };
+		A1B2C307000000000000B001 /* GPUScene.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F001 /* GPUScene.mm */; };
+		A1B2C307000000000000B002 /* SceneUploader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F002 /* SceneUploader.mm */; };
+		A1B2C307000000000000B003 /* AccelerationStructureBuilder.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */; };
+		A1B2C307000000000000B011 /* GPUScene.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F001 /* GPUScene.mm */; };
+		A1B2C307000000000000B012 /* SceneUploader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F002 /* SceneUploader.mm */; };
+		A1B2C307000000000000B013 /* AccelerationStructureBuilder.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -129,6 +135,9 @@
 		A1B2C306000000000000F003 /* MaterialAsset.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MaterialAsset.mm; sourceTree = "<group>"; };
 		A1B2C306000000000000F004 /* SceneAsset.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneAsset.mm; sourceTree = "<group>"; };
 		A1B2C306000000000000F005 /* SceneLoader.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneLoader.mm; sourceTree = "<group>"; };
+		A1B2C307000000000000F001 /* GPUScene.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = GPUScene.mm; sourceTree = "<group>"; };
+		A1B2C307000000000000F002 /* SceneUploader.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneUploader.mm; sourceTree = "<group>"; };
+		A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AccelerationStructureBuilder.mm; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -336,6 +345,9 @@
 		A1B2C304000000000000A007 /* GPU */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C307000000000000F001 /* GPUScene.mm */,
+				A1B2C307000000000000F002 /* SceneUploader.mm */,
+				A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */,
 			);
 			path = GPU;
 			sourceTree = "<group>";
@@ -509,6 +521,9 @@
 				A1B2C306000000000000B003 /* MaterialAsset.mm in Sources */,
 				A1B2C306000000000000B004 /* SceneAsset.mm in Sources */,
 				A1B2C306000000000000B005 /* SceneLoader.mm in Sources */,
+				A1B2C307000000000000B001 /* GPUScene.mm in Sources */,
+				A1B2C307000000000000B002 /* SceneUploader.mm in Sources */,
+				A1B2C307000000000000B003 /* AccelerationStructureBuilder.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -567,6 +582,9 @@
 				A1B2C306000000000000B013 /* MaterialAsset.mm in Sources */,
 				A1B2C306000000000000B014 /* SceneAsset.mm in Sources */,
 				A1B2C306000000000000B015 /* SceneLoader.mm in Sources */,
+				A1B2C307000000000000B011 /* GPUScene.mm in Sources */,
+				A1B2C307000000000000B012 /* SceneUploader.mm in Sources */,
+				A1B2C307000000000000B013 /* AccelerationStructureBuilder.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -616,6 +634,7 @@
 					"$(SRCROOT)/ThirdParty/dds_loader",
 					"$(SRCROOT)/Scene",
 					"$(SRCROOT)/Import",
+					"$(SRCROOT)/GPU",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -651,6 +670,7 @@
 					"$(SRCROOT)/ThirdParty/dds_loader",
 					"$(SRCROOT)/Scene",
 					"$(SRCROOT)/Import",
+					"$(SRCROOT)/GPU",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -927,6 +947,7 @@
 					"$(SRCROOT)/ThirdParty/dds_loader",
 					"$(SRCROOT)/Scene",
 					"$(SRCROOT)/Import",
+					"$(SRCROOT)/GPU",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -963,6 +984,7 @@
 					"$(SRCROOT)/ThirdParty/dds_loader",
 					"$(SRCROOT)/Scene",
 					"$(SRCROOT)/Import",
+					"$(SRCROOT)/GPU",
 				);
 				INFOPLIST_FILE = Application/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

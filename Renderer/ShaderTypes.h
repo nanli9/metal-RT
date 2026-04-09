@@ -67,4 +67,26 @@ struct Triangle {
     vector_float3 colors[3];
 };
 
+// ---- GPU scene types (used by Bistro path) ----
+
+struct GPUTriangleData {
+    vector_float3 normals[3];
+    vector_float2 uvs[3];
+    vector_float3 tangents[3];
+    float tangentSign[3];
+    unsigned int materialIndex;
+};
+
+struct GPUMaterial {
+    packed_float3 baseColorFactor;
+    float roughnessFactor;
+    float metallicFactor;
+    float opacity;
+    packed_float3 emissiveFactor;
+    unsigned int baseColorTextureIndex;
+    unsigned int normalTextureIndex;
+    unsigned int specularTextureIndex;   // ORM packed
+    unsigned int emissiveTextureIndex;
+};
+
 #endif

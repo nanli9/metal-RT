@@ -52,11 +52,11 @@ _Goal: ImportedScene → engine-owned assets with loaded textures._
 ## Phase 3: GPU Upload + Acceleration Structures
 _Goal: SceneAsset → GPU-resident data with BLAS/TLAS._
 
-- [ ] **3.1** Write `GPU/GPUScene.h/mm` — owns all GPU buffers (vertex, index, normal, UV, per-primitive, material, instance) + texture array + BLAS array + TLAS
-- [ ] **3.2** Write `GPU/SceneUploader.h/mm` — creates Metal buffers from SceneAsset, uploads vertex/index/material data
-- [ ] **3.3** Write `GPU/AccelerationStructureBuilder.h/mm` — extract BLAS/TLAS logic from Renderer.mm, generalize for GPUScene (one BLAS per unique mesh, TLAS from instance list, compaction)
-- [ ] **3.4** Add new files to Xcode targets
-- [ ] **3.5** Test: build BLAS/TLAS for Bistro without Metal validation errors, log triangle count and build time
+- [x] **3.1** Write `GPU/GPUScene.h/mm` — owns all GPU buffers (vertex, index, normal, UV, per-primitive, material, instance) + texture array + BLAS array + TLAS
+- [x] **3.2** Write `GPU/SceneUploader.h/mm` — creates Metal buffers from SceneAsset, uploads vertex/index/material data
+- [x] **3.3** Write `GPU/AccelerationStructureBuilder.h/mm` — extract BLAS/TLAS logic from Renderer.mm, generalize for GPUScene (one BLAS per unique mesh, TLAS from instance list, compaction)
+- [x] **3.4** Add new files to Xcode targets
+- [x] **3.5** Test: build BLAS/TLAS for Bistro without Metal validation errors, log triangle count and build time
 
 **STOP — wait for user review before starting Phase 4.**
 
