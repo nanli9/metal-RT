@@ -89,6 +89,8 @@
 		A1B2C307000000000000B013 /* AccelerationStructureBuilder.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */; };
 		A1B2C308000000000000B001 /* CameraController.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C308000000000000F001 /* CameraController.mm */; };
 		A1B2C308000000000000B002 /* CameraController.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C308000000000000F001 /* CameraController.mm */; };
+		A1B2C309000000000000B001 /* ImGuiRenderer.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C309000000000000F001 /* ImGuiRenderer.mm */; };
+		A1B2C309000000000000B002 /* ImGuiRenderer.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C309000000000000F001 /* ImGuiRenderer.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -141,6 +143,7 @@
 		A1B2C307000000000000F002 /* SceneUploader.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneUploader.mm; sourceTree = "<group>"; };
 		A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AccelerationStructureBuilder.mm; sourceTree = "<group>"; };
 		A1B2C308000000000000F001 /* CameraController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "Scene/CameraController.mm"; sourceTree = SOURCE_ROOT; };
+		A1B2C309000000000000F001 /* ImGuiRenderer.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "Application/ImGuiRenderer.mm"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -191,6 +194,7 @@
 				5236FED42F3FE41000437B09 /* WindowSceneDelegate.m */,
 				5113DC9D24773F1000259320 /* ViewController.h */,
 				5113DCA024773F1000259320 /* ViewController.mm */,
+				A1B2C309000000000000F001 /* ImGuiRenderer.mm */,
 				5113DC9F24773F1000259320 /* Assets.xcassets */,
 				51F7FFEA209BC36D0017E288 /* iOS */,
 				51F7FFEB209BC37E0017E288 /* macOS */,
@@ -529,6 +533,7 @@
 				A1B2C307000000000000B002 /* SceneUploader.mm in Sources */,
 				A1B2C307000000000000B003 /* AccelerationStructureBuilder.mm in Sources */,
 				A1B2C308000000000000B001 /* CameraController.mm in Sources */,
+				A1B2C309000000000000B001 /* ImGuiRenderer.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -591,6 +596,7 @@
 				A1B2C307000000000000B012 /* SceneUploader.mm in Sources */,
 				A1B2C307000000000000B013 /* AccelerationStructureBuilder.mm in Sources */,
 				A1B2C308000000000000B002 /* CameraController.mm in Sources */,
+				A1B2C309000000000000B002 /* ImGuiRenderer.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

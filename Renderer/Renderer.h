@@ -29,4 +29,7 @@ struct RenderOptions;
 /// Reset frame accumulation (call when camera moves)
 - (void)resetAccumulation;
 
+/// The command queue used by the renderer (for ImGui to encode after RT passes)
+@property (nonatomic, readonly) id<MTLCommandQueue> commandQueue;
+
 @end

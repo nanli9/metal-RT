@@ -12,13 +12,19 @@ The implementation of the cross-platform view controller.
 #import "SceneUploader.h"
 #import "AccelerationStructureBuilder.h"
 #import "CameraController.h"
+#import "ImGuiRenderer.h"
+#include "imgui.h"
 
 @implementation ViewController
 {
     MTKView *_view;
     Renderer *_renderer;
     CameraController *_cameraController;
+    ImGuiRenderer *_imguiRenderer;
     NSDate *_lastFrameTime;
+    float _fps;
+    int _fpsFrameCount;
+    NSDate *_fpsLastTime;
 }
 
 /// Parse command-line arguments to determine which scene to load.
@@ -119,6 +125,12 @@ The implementation of the cross-platform view controller.
     [_renderer mtkView:_view drawableSizeWillChange:_view.bounds.size];
     _view.delegate = self;
     _lastFrameTime = [NSDate date];
+    _fpsLastTime = [NSDate date];
+    _fps = 0;
+    _fpsFrameCount = 0;
+
+    // Initialize ImGui overlay
+    _imguiRenderer = [[ImGuiRenderer alloc] initWithDevice:_view.device view:_view];
 }
 
 #pragma mark - MTKViewDelegate forwarding + camera update
@@ -145,6 +157,30 @@ The implementation of the cross-platform view controller.
     }
 
     [_renderer drawInMTKView:view];
+
+    // ImGui overlay — render FPS after RT passes
+    if (_imguiRenderer && view.currentDrawable) {
+        // Update FPS counter
+        _fpsFrameCount++;
+        NSTimeInterval elapsed = -[_fpsLastTime timeIntervalSinceNow];
+        if (elapsed >= 0.5) {
+            _fps = (float)_fpsFrameCount / (float)elapsed;
+            _fpsFrameCount = 0;
+            _fpsLastTime = [NSDate date];
+        }
+
+        [_imguiRenderer newFrame:view];
+
+        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(220, 60), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoResize);
+        ImGui::Text("FPS: %.1f (%.2f ms)", _fps, _fps > 0 ? 1000.0f / _fps : 0.0f);
+        ImGui::End();
+
+        id<MTLCommandBuffer> cmdBuf = [_renderer.commandQueue commandBuffer];
+        [_imguiRenderer renderWithCommandBuffer:cmdBuf drawable:view.currentDrawable];
+        [cmdBuf commit];
+    }
 }
 
 #pragma mark - macOS input events

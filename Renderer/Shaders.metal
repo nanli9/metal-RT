@@ -156,6 +156,91 @@ inline float3 alignHemisphereWithNormal(float3 sample, float3 normal) {
     return sample.x * right + sample.y * up + sample.z * forward;
 }
 
+// ---- Argument buffer for bindless texture access (Metal 3) ----
+
+struct SceneTextureArgBuffer {
+    array<texture2d<float>, 512> textures [[id(0)]];
+};
+
+// ---- PBR helper functions ----
+
+constexpr sampler texSampler(filter::linear, address::repeat);
+
+inline float3 sampleTexture(device SceneTextureArgBuffer &argBuf, uint texIdx, float2 uv) {
+    if (texIdx == 0xFFFFFFFF) return float3(1.0f);
+    return argBuf.textures[texIdx].sample(texSampler, uv).rgb;
+}
+
+inline float4 sampleTexture4(device SceneTextureArgBuffer &argBuf, uint texIdx, float2 uv) {
+    if (texIdx == 0xFFFFFFFF) return float4(1.0f);
+    return argBuf.textures[texIdx].sample(texSampler, uv);
+}
+
+// GGX/Trowbridge-Reitz normal distribution function
+inline float distributionGGX(float NdotH, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float denom = NdotH * NdotH * (a2 - 1.0f) + 1.0f;
+    return a2 / (M_PI_F * denom * denom + 1e-7f);
+}
+
+// Schlick geometry function
+inline float geometrySchlickGGX(float NdotV, float roughness) {
+    float r = roughness + 1.0f;
+    float k = (r * r) / 8.0f;
+    return NdotV / (NdotV * (1.0f - k) + k);
+}
+
+inline float geometrySmith(float NdotV, float NdotL, float roughness) {
+    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+}
+
+// Fresnel-Schlick approximation
+inline float3 fresnelSchlick(float cosTheta, float3 F0) {
+    return F0 + (1.0f - F0) * pow(saturate(1.0f - cosTheta), 5.0f);
+}
+
+// Evaluate PBR direct lighting for a single light direction
+inline float3 evaluatePBR(float3 N, float3 V, float3 L,
+                          float3 albedo, float metallic, float roughness,
+                          float3 lightColor) {
+    float3 H = normalize(V + L);
+
+    float NdotL = saturate(dot(N, L));
+    float NdotV = saturate(dot(N, V));
+    float NdotH = saturate(dot(N, H));
+    float HdotV = saturate(dot(H, V));
+
+    if (NdotL <= 0.0f) return float3(0.0f);
+
+    float3 F0 = mix(float3(0.04f), albedo, metallic);
+
+    float D = distributionGGX(NdotH, roughness);
+    float G = geometrySmith(NdotV, NdotL, roughness);
+    float3 F = fresnelSchlick(HdotV, F0);
+
+    // Specular BRDF
+    float3 specular = (D * G * F) / (4.0f * NdotV * NdotL + 1e-4f);
+
+    // Diffuse: metals have no diffuse
+    float3 kD = (1.0f - F) * (1.0f - metallic);
+    float3 diffuse = kD * albedo / M_PI_F;
+
+    return (diffuse + specular) * lightColor * NdotL;
+}
+
+// Apply normal map using TBN matrix
+inline float3 applyNormalMap(float3 normalMapSample, float3 N, float3 T, float tangentSign) {
+    // Normal map is in tangent space, convert from [0,1] to [-1,1]
+    float3 tangentNormal = normalMapSample * 2.0f - 1.0f;
+
+    // Build TBN matrix
+    float3 B = cross(N, T) * tangentSign;
+    float3x3 TBN = float3x3(T, B, N);
+
+    return normalize(TBN * tangentNormal);
+}
+
 // Return the type for a bounding box intersection function.
 struct BoundingBoxIntersection {
     bool accept    [[accept_intersection]]; // Whether to accept or reject the intersection.
@@ -273,7 +358,9 @@ kernel void raytracingKernel(
      constant AreaLight                                    *areaLights                [[buffer(3)]],
      instance_acceleration_structure                        accelerationStructure     [[buffer(4)]],
      intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]],
-     constant GPUMaterial                                  *materials                 [[buffer(6), function_constant(bistroMode)]]
+     constant GPUMaterial                                  *materials                 [[buffer(6), function_constant(bistroMode)]],
+     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]],
+     texture2d<float>                                       environmentMap            [[texture(3), function_constant(bistroMode)]]
 )
 {
     // The sample aligns the thread count to the threadgroup size, which means the thread count
@@ -346,8 +433,18 @@ kernel void raytracingKernel(
                 intersection = i.intersect(ray, accelerationStructure, bounce == 0 ? RAY_MASK_PRIMARY : RAY_MASK_SECONDARY);
 
             // Stop if the ray didn't hit anything and has bounced out of the scene.
-            if (intersection.type == intersection_type::none)
+            if (intersection.type == intersection_type::none) {
+                if (bistroMode) {
+                    // Sample environment map on miss
+                    float3 dir = normalize(ray.direction);
+                    // Equirectangular mapping
+                    float u_env = atan2(dir.x, dir.z) / (2.0f * M_PI_F) + 0.5f;
+                    float v_env = asin(clamp(dir.y, -1.0f, 1.0f)) / M_PI_F + 0.5f;
+                    float3 envColor = environmentMap.sample(texSampler, float2(u_env, v_env)).rgb;
+                    accumulatedColor += envColor * color * 0.8f;
+                }
                 break;
+            }
 
             unsigned int instanceIndex = intersection.instance_id;
 
@@ -376,6 +473,8 @@ kernel void raytracingKernel(
 
             float3 worldSpaceSurfaceNormal = 0.0f;
             float3 surfaceColor = 0.0f;
+            float bistroRoughness = 0.5f;
+            float bistroMetallic = 0.0f;
 
             if (mask & GEOMETRY_MASK_TRIANGLE) {
                 float3 objectSpaceSurfaceNormal;
@@ -384,28 +483,59 @@ kernel void raytracingKernel(
                 if (bistroMode && usePerPrimitiveData) {
                     // Bistro path: read GPUTriangleData from per-primitive data
                     const device GPUTriangleData &tri = *(const device GPUTriangleData*)intersection.primitive_data;
+                    float w0 = 1.0f - barycentric_coords.x - barycentric_coords.y;
 
                     // Interpolate normals
                     float3 n0 = float3(tri.normals[0][0], tri.normals[0][1], tri.normals[0][2]);
                     float3 n1 = float3(tri.normals[1][0], tri.normals[1][1], tri.normals[1][2]);
                     float3 n2 = float3(tri.normals[2][0], tri.normals[2][1], tri.normals[2][2]);
-                    objectSpaceSurfaceNormal = (1.0f - barycentric_coords.x - barycentric_coords.y) * n0
-                                             + barycentric_coords.x * n1
-                                             + barycentric_coords.y * n2;
+                    objectSpaceSurfaceNormal = w0 * n0 + barycentric_coords.x * n1 + barycentric_coords.y * n2;
 
                     // Interpolate UVs
                     float2 uv0 = float2(tri.uvs[0][0], tri.uvs[0][1]);
                     float2 uv1 = float2(tri.uvs[1][0], tri.uvs[1][1]);
                     float2 uv2 = float2(tri.uvs[2][0], tri.uvs[2][1]);
-                    float2 uv = (1.0f - barycentric_coords.x - barycentric_coords.y) * uv0
-                               + barycentric_coords.x * uv1
-                               + barycentric_coords.y * uv2;
+                    float2 uv = w0 * uv0 + barycentric_coords.x * uv1 + barycentric_coords.y * uv2;
+
+                    // Interpolate tangents
+                    float3 t0 = float3(tri.tangents[0][0], tri.tangents[0][1], tri.tangents[0][2]);
+                    float3 t1 = float3(tri.tangents[1][0], tri.tangents[1][1], tri.tangents[1][2]);
+                    float3 t2 = float3(tri.tangents[2][0], tri.tangents[2][1], tri.tangents[2][2]);
+                    float3 objectTangent = normalize(w0 * t0 + barycentric_coords.x * t1 + barycentric_coords.y * t2);
+                    float tangentSign = tri.tangentSign[0]; // same for all verts of triangle
 
                     // Look up material
                     constant GPUMaterial &mat = materials[tri.materialIndex];
-                    surfaceColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
 
-                    // Texture sampling will be added in Phase 5 with proper argument buffer setup
+                    // Sample base color texture
+                    float3 baseColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
+                    baseColor *= sampleTexture(sceneTexArgBuf, mat.baseColorTextureIndex, uv);
+
+                    // Transform normal and tangent to world space
+                    float3 worldNormal = normalize(transformDirection(objectSpaceSurfaceNormal, objectToWorldSpaceTransform));
+                    float3 worldTangent = normalize(transformDirection(objectTangent, objectToWorldSpaceTransform));
+
+                    // Apply normal map (only if tangent is valid)
+                    if (mat.normalTextureIndex != 0xFFFFFFFF && length_squared(worldTangent) > 0.001f) {
+                        float3 normalMapVal = sampleTexture(sceneTexArgBuf, mat.normalTextureIndex, uv);
+                        worldNormal = applyNormalMap(normalMapVal, worldNormal, worldTangent, tangentSign);
+                    }
+
+                    // Read roughness/metalness from specular texture (R=AO, G=Roughness, B=Metalness)
+                    float roughness = mat.roughnessFactor;
+                    float metallic = mat.metallicFactor;
+                    float ao = 1.0f;
+                    if (mat.specularTextureIndex != 0xFFFFFFFF) {
+                        float3 orm = sampleTexture(sceneTexArgBuf, mat.specularTextureIndex, uv);
+                        ao = orm.x;
+                        roughness = orm.y;
+                        metallic = orm.z;
+                    }
+
+                    worldSpaceSurfaceNormal = worldNormal;
+                    surfaceColor = baseColor * ao;
+                    bistroRoughness = roughness;
+                    bistroMetallic = metallic;
 
                 } else if (usePerPrimitiveData) {
                     // Original Cornell box per-primitive path
@@ -463,10 +593,15 @@ kernel void raytracingKernel(
             float lightDistance;
 
             if (bistroMode) {
-                // Simple directional sun light for Bistro
+                // Directional sun light for Bistro with PBR evaluation
                 worldSpaceLightDirection = normalize(float3(0.5f, 1.0f, 0.3f));
-                float NdotL = saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
-                lightColor = float3(2.0f, 1.9f, 1.7f) * NdotL;
+                float3 sunRadiance = float3(5.0f, 4.8f, 4.2f);
+                float3 V = -ray.direction;
+                lightColor = evaluatePBR(worldSpaceSurfaceNormal, V, worldSpaceLightDirection,
+                                        surfaceColor, bistroMetallic, bistroRoughness, sunRadiance);
+                // Ambient sky light
+                float3 ambient = surfaceColor * float3(0.3f, 0.35f, 0.5f) * (1.0f - bistroMetallic * 0.5f);
+                lightColor += ambient;
                 lightDistance = INFINITY;
             } else {
                 // Choose a random light source to sample.
@@ -490,37 +625,44 @@ kernel void raytracingKernel(
                 lightColor *= uniforms.lightCount;
             }
 
-            // Scale the ray color by the color of the surface to simulate the surface absorbing light.
-            color *= surfaceColor;
+            if (bistroMode) {
+                // PBR path: cast shadow ray for sun visibility
+                struct ray shadowRay;
+                shadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
+                shadowRay.direction = worldSpaceLightDirection;
+                shadowRay.max_distance = INFINITY;
 
-            // Compute the shadow ray. The shadow ray checks whether the sample position on the
-            // light source is visible from the current intersection point.
-            // If it is, the kernel adds lighting to the output image.
-            struct ray shadowRay;
-
-            // Add a small offset to the intersection point to avoid intersecting the same
-            // triangle again.
-            shadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
-
-            // Travel toward the light source.
-            shadowRay.direction = worldSpaceLightDirection;
-
-            // Don't overshoot the light source.
-            shadowRay.max_distance = lightDistance - 1e-3f;
-
-            // Shadow rays check only whether there is an object between the intersection point
-            // and the light source. Tell Metal to return after finding any intersection.
-            i.accept_any_intersection(true);
-
-            if (useIntersectionFunctions)
-                intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW, intersectionFunctionTable);
-            else
+                i.accept_any_intersection(true);
                 intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW);
 
-            // If there was no intersection, then the light source is visible from the original
-            // intersection  point. Add the light's contribution to the image.
-            if (intersection.type == intersection_type::none)
-                accumulatedColor += lightColor * color;
+                // lightColor already includes albedo from evaluatePBR
+                float3 ambient = surfaceColor * float3(0.3f, 0.35f, 0.5f) * (1.0f - bistroMetallic * 0.5f);
+                if (intersection.type == intersection_type::none)
+                    accumulatedColor += lightColor * color;
+                else
+                    accumulatedColor += ambient * color; // shadow: ambient only
+
+                // Attenuate for next bounce (diffuse-like)
+                color *= surfaceColor;
+            } else {
+                // Original Cornell box Lambertian path
+                color *= surfaceColor;
+
+                struct ray shadowRay;
+                shadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
+                shadowRay.direction = worldSpaceLightDirection;
+                shadowRay.max_distance = lightDistance - 1e-3f;
+
+                i.accept_any_intersection(true);
+
+                if (useIntersectionFunctions)
+                    intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW, intersectionFunctionTable);
+                else
+                    intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW);
+
+                if (intersection.type == intersection_type::none)
+                    accumulatedColor += lightColor * color;
+            }
 
             // Choose a random direction to continue the path of the ray. This causes light to
             // bounce between surfaces. An app might evaluate a more complicated equation to

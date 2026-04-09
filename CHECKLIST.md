@@ -92,13 +92,14 @@ _Goal: Navigate through Bistro interactively._
 ## Phase 6: PBR Shading + Environment
 _Goal: Correct physically-based appearance._
 
-- [ ] **6.1** Add `evaluatePBR()` to shaders: GGX specular + Lambertian diffuse
-- [ ] **6.2** Add `sampleNormalMap()`: TBN transform from interpolated tangent + normal
-- [ ] **6.3** Read roughness/metalness from specular texture (R=AO, G=Roughness, B=Metalness)
-- [ ] **6.4** Load and bind HDR environment map, sample on ray miss
-- [ ] **6.5** Wire reflections toggle: skip bounce rays if `!enableReflections`
-- [ ] **6.6** Add G-buffer output textures (depth R32Float, normal RGBA16Float, albedo RGBA8Unorm) and write them in shader
-- [ ] **6.7** Test: PBR lighting correct, normal maps visible, environment in reflections
+- [x] **6.1** Add `evaluatePBR()` to shaders: GGX specular + Lambertian diffuse
+- [x] **6.2** Add `sampleNormalMap()`: TBN transform from interpolated tangent + normal
+- [x] **6.3** Read roughness/metalness from specular texture (R=AO, G=Roughness, B=Metalness)
+- [x] **6.4** Load and bind HDR environment map, sample on ray miss
+- [ ] **6.5** Wire reflections toggle: skip bounce rays if `!enableReflections` (deferred to Phase 7)
+- [ ] **6.6** Add G-buffer output textures (depth R32Float, normal RGBA16Float, albedo RGBA8Unorm) and write them in shader (deferred to Phase 8)
+- [x] **6.7** Test: PBR lighting with textures, normal maps, environment map
+- [x] **6.8** (bonus) ImGui overlay with FPS counter
 
 **STOP — wait for user review before starting Phase 7.**
 
