@@ -10,9 +10,23 @@ The header for the renderer class that performs Metal setup and per-frame render
 
 #import "Scene.h"
 
+@class GPUScene;
+@class SceneAsset;
+struct RenderOptions;
+
 @interface Renderer : NSObject <MTKViewDelegate>
 
 - (instancetype)initWithDevice:(id<MTLDevice>)device
                          scene:(Scene *)scene;
+
+- (instancetype)initWithDevice:(id<MTLDevice>)device
+                      gpuScene:(GPUScene *)gpuScene
+                    sceneAsset:(SceneAsset *)sceneAsset;
+
+@property (nonatomic) simd_float3 cameraPosition;
+@property (nonatomic) simd_float3 cameraTarget;
+
+/// Reset frame accumulation (call when camera moves)
+- (void)resetAccumulation;
 
 @end

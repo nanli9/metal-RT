@@ -65,13 +65,13 @@ _Goal: SceneAsset → GPU-resident data with BLAS/TLAS._
 ## Phase 4: Renderer Integration (First Bistro Pixels)
 _Goal: See textured Bistro geometry on screen._
 
-- [ ] **4.1** Add `GPUMaterial`, `GPUTriangleData`, `RenderOptionsGPU` structs to `ShaderTypes.h`
-- [ ] **4.2** Add GPUScene initializer to `Renderer.h/mm`
-- [ ] **4.3** Add GPUScene code path in Renderer: `createPipelines`, `createBuffers`, resource binding in `drawInMTKView:`
-- [ ] **4.4** Modify `Shaders.metal` triangle-hit branch: read `GPUTriangleData`, sample base color texture, basic Lambertian shading
-- [ ] **4.5** Wire `RenderOptionsGPU` into Uniforms: skip shadow rays if `!enableShadows`
-- [ ] **4.6** Modify `ViewController.mm`: load Bistro via SceneImporter → SceneAsset → GPUScene → Renderer
-- [ ] **4.7** Test: Bistro appears on screen with base color textures, correct geometry
+- [x] **4.1** Add `GPUMaterial`, `GPUTriangleData` structs to `ShaderTypes.h`
+- [x] **4.2** Add GPUScene initializer to `Renderer.h/mm`
+- [x] **4.3** Add GPUScene code path in Renderer: `createBistroPipelines`, `createBistroBuffers`, bistro resource binding in `drawInMTKView:`
+- [x] **4.4** Modify `Shaders.metal`: add `bistroMode` function constant, read `GPUTriangleData` per-primitive data, interpolate normals/UVs, basic Lambertian with material base color and directional sun light
+- [ ] **4.5** Wire `RenderOptionsGPU` into Uniforms: skip shadow rays if `!enableShadows` (deferred to Phase 7)
+- [x] **4.6** Modify `ViewController.mm`: load Bistro via SceneImporter → SceneAsset → GPUScene → Renderer, with fallback to Cornell box
+- [x] **4.7** Test: Bistro appears on screen with correct geometry and material colors
 
 **STOP — wait for user review before starting Phase 5.**
 

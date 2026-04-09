@@ -11,6 +11,9 @@ The implementation of the renderer class that performs Metal setup and per-frame
 #import "Transforms.h"
 #import "ShaderTypes.h"
 #import "Scene.h"
+#import "GPUScene.h"
+#import "SceneAsset.h"
+#import "RenderOptions.h"
 
 using namespace simd;
 
@@ -51,6 +54,11 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     NSUInteger _resourcesStride;
     bool _useIntersectionFunctions;
     bool _usePerPrimitiveData;
+
+    // Bistro/GPUScene path
+    GPUScene *_gpuScene;
+    SceneAsset *_sceneAsset;
+    bool _useBistroPath;
 }
 
 - (nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device
@@ -73,6 +81,35 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     }
 
     return self;
+}
+
+- (nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device
+                              gpuScene:(GPUScene *)gpuScene
+                            sceneAsset:(SceneAsset *)sceneAsset
+{
+    self = [super init];
+
+    if (self)
+    {
+        _device = device;
+        _sem = dispatch_semaphore_create(maxFramesInFlight);
+        _gpuScene = gpuScene;
+        _sceneAsset = sceneAsset;
+        _useBistroPath = YES;
+
+        _cameraPosition = sceneAsset.cameraPosition;
+        _cameraTarget = sceneAsset.cameraTarget;
+
+        [self loadMetal];
+        [self createBistroBuffers];
+        [self createBistroPipelines];
+    }
+
+    return self;
+}
+
+- (void)resetAccumulation {
+    _frameIndex = 0;
 }
 
 // Initialize the Metal shader library and command queue.
@@ -133,8 +170,12 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // The second constant turns the use of intersection functions on and off.
     [constants setConstantValue:&_useIntersectionFunctions type:MTLDataTypeBool atIndex:1];
 
-    // The third constant turns the use of intersection functions on and off.
+    // The third constant turns the use of per-primitive data on and off.
     [constants setConstantValue:&_usePerPrimitiveData type:MTLDataTypeBool atIndex:2];
+
+    // The fourth constant enables the Bistro/GPUScene path.
+    bool bistroMode = _useBistroPath;
+    [constants setConstantValue:&bistroMode type:MTLDataTypeBool atIndex:3];
 
     NSError *error;
 
@@ -513,6 +554,54 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     _instanceAccelerationStructure = [self newAccelerationStructureWithDescriptor:accelDescriptor];
 }
 
+// ---- Bistro/GPUScene pipeline setup ----
+
+- (void)createBistroBuffers {
+    NSUInteger uniformBufferSize = alignedUniformsSize * maxFramesInFlight;
+    _uniformBuffer = [_device newBufferWithLength:uniformBufferSize options:MTLResourceStorageModeShared];
+}
+
+- (void)createBistroPipelines {
+    _useIntersectionFunctions = false;
+    _usePerPrimitiveData = true;
+    _resourcesStride = 0;
+
+    MTLFunctionConstantValues *constants = [[MTLFunctionConstantValues alloc] init];
+    uint32_t resourcesStride = 0;
+    [constants setConstantValue:&resourcesStride type:MTLDataTypeUInt atIndex:0];
+    bool noIntersectionFunctions = false;
+    [constants setConstantValue:&noIntersectionFunctions type:MTLDataTypeBool atIndex:1];
+    bool perPrimitiveData = true;
+    [constants setConstantValue:&perPrimitiveData type:MTLDataTypeBool atIndex:2];
+    bool bistroMode = true;
+    [constants setConstantValue:&bistroMode type:MTLDataTypeBool atIndex:3];
+
+    NSError *error;
+    id<MTLFunction> raytracingFunction = [_library newFunctionWithName:@"raytracingKernel"
+                                                        constantValues:constants
+                                                                 error:&error];
+    NSAssert(raytracingFunction, @"Failed to create bistro raytracing function: %@", error);
+
+    MTLComputePipelineDescriptor *descriptor = [[MTLComputePipelineDescriptor alloc] init];
+    descriptor.computeFunction = raytracingFunction;
+    descriptor.threadGroupSizeIsMultipleOfThreadExecutionWidth = YES;
+
+    _raytracingPipeline = [_device newComputePipelineStateWithDescriptor:descriptor
+                                                                 options:0
+                                                              reflection:nil
+                                                                   error:&error];
+    NSAssert(_raytracingPipeline, @"Failed to create bistro raytracing pipeline: %@", error);
+
+    // Copy pipeline (same as original)
+    MTLRenderPipelineDescriptor *renderDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    renderDescriptor.vertexFunction = [_library newFunctionWithName:@"copyVertex"];
+    renderDescriptor.fragmentFunction = [_library newFunctionWithName:@"copyFragment"];
+    renderDescriptor.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA16Float;
+
+    _copyPipeline = [_device newRenderPipelineStateWithDescriptor:renderDescriptor error:&error];
+    NSAssert(_copyPipeline, @"Failed to create copy pipeline: %@", error);
+}
+
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size
 {
     _size = size;
@@ -569,9 +658,16 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     Uniforms *uniforms = (Uniforms *)((char *)_uniformBuffer.contents + _uniformBufferOffset);
 
-    vector_float3 position = _scene.cameraPosition;
-    vector_float3 target = _scene.cameraTarget;
-    vector_float3 up = _scene.cameraUp;
+    vector_float3 position, target, up;
+    if (_useBistroPath) {
+        position = _cameraPosition;
+        target = _cameraTarget;
+        up = simd_make_float3(0.0f, 1.0f, 0.0f);
+    } else {
+        position = _scene.cameraPosition;
+        target = _scene.cameraTarget;
+        up = _scene.cameraUp;
+    }
 
     vector_float3 forward = vector_normalize(target - position);
     vector_float3 right = vector_normalize(vector_cross(forward, up));
@@ -595,7 +691,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     uniforms->frameIndex = _frameIndex++;
 
-    uniforms->lightCount = (unsigned int)_scene.lightCount;
+    uniforms->lightCount = _useBistroPath ? 0 : (unsigned int)_scene.lightCount;
 
 #if !TARGET_OS_IPHONE
     [_uniformBuffer didModifyRange:NSMakeRange(_uniformBufferOffset, alignedUniformsSize)];
@@ -644,39 +740,48 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // Create a compute encoder to encode GPU commands.
     id <MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
 
-    // Bind buffers.
-    [computeEncoder setBuffer:_uniformBuffer            offset:_uniformBufferOffset atIndex:0];
-    if (!_usePerPrimitiveData) {
-        [computeEncoder setBuffer:_resourceBuffer           offset:0                    atIndex:1];
+    if (_useBistroPath) {
+        // ---- Bistro/GPUScene binding path ----
+        [computeEncoder setBuffer:_uniformBuffer offset:_uniformBufferOffset atIndex:0];
+        [computeEncoder setBuffer:_gpuScene.instanceBuffer offset:0 atIndex:2];
+        [computeEncoder setBuffer:_gpuScene.materialBuffer offset:0 atIndex:6];
+
+        [computeEncoder setAccelerationStructure:_gpuScene.instanceAccelerationStructure atBufferIndex:4];
+
+        [computeEncoder setTexture:_randomTexture atIndex:0];
+        [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
+        [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
+
+        // Bind scene textures for material sampling
+        for (NSUInteger i = 0; i < _gpuScene.textures.count; i++)
+            [computeEncoder setTexture:_gpuScene.textures[i] atIndex:3 + i];
+
+        // Mark all BLAS as used
+        for (id<MTLAccelerationStructure> blas in _gpuScene.primitiveAccelerationStructures)
+            [computeEncoder useResource:blas usage:MTLResourceUsageRead];
+    } else {
+        // ---- Original Cornell box binding path ----
+        [computeEncoder setBuffer:_uniformBuffer            offset:_uniformBufferOffset atIndex:0];
+        if (!_usePerPrimitiveData) {
+            [computeEncoder setBuffer:_resourceBuffer           offset:0                    atIndex:1];
+        }
+        [computeEncoder setBuffer:_instanceBuffer           offset:0                    atIndex:2];
+        [computeEncoder setBuffer:_scene.lightBuffer        offset:0                    atIndex:3];
+
+        [computeEncoder setAccelerationStructure:_instanceAccelerationStructure atBufferIndex:4];
+        [computeEncoder setIntersectionFunctionTable:_intersectionFunctionTable atBufferIndex:5];
+
+        [computeEncoder setTexture:_randomTexture atIndex:0];
+        [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
+        [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
+
+        for (Geometry *geometry in _scene.geometries)
+            for (id <MTLResource> resource in geometry.resources)
+                [computeEncoder useResource:resource usage:MTLResourceUsageRead];
+
+        for (id <MTLAccelerationStructure> primitiveAccelerationStructure in _primitiveAccelerationStructures)
+            [computeEncoder useResource:primitiveAccelerationStructure usage:MTLResourceUsageRead];
     }
-    [computeEncoder setBuffer:_instanceBuffer           offset:0                    atIndex:2];
-    [computeEncoder setBuffer:_scene.lightBuffer        offset:0                    atIndex:3];
-
-    // Bind acceleration structure and intersection function table. These bind to normal buffer
-    // binding slots.
-    [computeEncoder setAccelerationStructure:_instanceAccelerationStructure atBufferIndex:4];
-    [computeEncoder setIntersectionFunctionTable:_intersectionFunctionTable atBufferIndex:5];
-
-    // Bind textures. The ray tracing kernel reads from _accumulationTargets[0], averages the
-    // result with this frame's samples and writes to _accumulationTargets[1].
-    [computeEncoder setTexture:_randomTexture atIndex:0];
-    [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
-    [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
-
-    // Mark any resources used by intersection functions as "used". The sample does this because
-    // it only references these resources indirectly via the resource buffer. Metal makes all the
-    // marked resources resident in memory before the intersection functions execute.
-    // Normally, the sample would also mark the resource buffer itself since the
-    // intersection table references it indirectly. However, the sample also binds the resource
-    // buffer directly, so it doesn't need to mark it explicitly.
-    for (Geometry *geometry in _scene.geometries)
-        for (id <MTLResource> resource in geometry.resources)
-            [computeEncoder useResource:resource usage:MTLResourceUsageRead];
-
-    // Also mark primitive acceleration structures as used since only the instance acceleration
-    // structure references them.
-    for (id <MTLAccelerationStructure> primitiveAccelerationStructure in _primitiveAccelerationStructures)
-        [computeEncoder useResource:primitiveAccelerationStructure usage:MTLResourceUsageRead];
 
     // Bind the compute pipeline state.
     [computeEncoder setComputePipelineState:_raytracingPipeline];

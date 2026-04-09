@@ -68,21 +68,22 @@ struct Triangle {
 };
 
 // ---- GPU scene types (used by Bistro path) ----
+// These use plain float arrays for cross-platform (CPU + Metal shader) compatibility.
 
 struct GPUTriangleData {
-    vector_float3 normals[3];
-    vector_float2 uvs[3];
-    vector_float3 tangents[3];
+    float normals[3][3];    // 3 vertices * xyz
+    float uvs[3][2];        // 3 vertices * uv
+    float tangents[3][3];   // 3 vertices * xyz
     float tangentSign[3];
     unsigned int materialIndex;
 };
 
 struct GPUMaterial {
-    packed_float3 baseColorFactor;
+    float baseColorFactor[3];
     float roughnessFactor;
     float metallicFactor;
     float opacity;
-    packed_float3 emissiveFactor;
+    float emissiveFactor[3];
     unsigned int baseColorTextureIndex;
     unsigned int normalTextureIndex;
     unsigned int specularTextureIndex;   // ORM packed

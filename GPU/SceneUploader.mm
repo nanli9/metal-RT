@@ -95,9 +95,14 @@
 
             for (int v = 0; v < 3; v++) {
                 uint32_t vi = mesh.indices[baseIdx + v];
-                tri.normals[v] = mesh.normals[vi];
-                tri.uvs[v] = mesh.uvs[vi];
-                tri.tangents[v] = simd_make_float3(mesh.tangents[vi].x, mesh.tangents[vi].y, mesh.tangents[vi].z);
+                tri.normals[v][0] = mesh.normals[vi].x;
+                tri.normals[v][1] = mesh.normals[vi].y;
+                tri.normals[v][2] = mesh.normals[vi].z;
+                tri.uvs[v][0] = mesh.uvs[vi].x;
+                tri.uvs[v][1] = mesh.uvs[vi].y;
+                tri.tangents[v][0] = mesh.tangents[vi].x;
+                tri.tangents[v][1] = mesh.tangents[vi].y;
+                tri.tangents[v][2] = mesh.tangents[vi].z;
                 tri.tangentSign[v] = mesh.tangents[vi].w;
             }
             tri.materialIndex = info.materialIndex;
@@ -134,10 +139,14 @@
         gpu.specularTextureIndex   = getTextureIndex(mat.specularTexture);
         gpu.emissiveTextureIndex   = getTextureIndex(mat.emissiveTexture);
 
-        gpu.baseColorFactor = (packed_float3)mat.baseColorFactor;
+        gpu.baseColorFactor[0] = mat.baseColorFactor.x;
+        gpu.baseColorFactor[1] = mat.baseColorFactor.y;
+        gpu.baseColorFactor[2] = mat.baseColorFactor.z;
         gpu.roughnessFactor = mat.roughnessFactor;
         gpu.metallicFactor  = mat.metallicFactor;
-        gpu.emissiveFactor  = (packed_float3)mat.emissiveFactor;
+        gpu.emissiveFactor[0] = mat.emissiveFactor.x;
+        gpu.emissiveFactor[1] = mat.emissiveFactor.y;
+        gpu.emissiveFactor[2] = mat.emissiveFactor.z;
         gpu.opacity         = mat.opacity;
     }
 

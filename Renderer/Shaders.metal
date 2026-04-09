@@ -16,6 +16,7 @@ using namespace raytracing;
 constant unsigned int resourcesStride   [[function_constant(0)]];
 constant bool useIntersectionFunctions  [[function_constant(1)]];
 constant bool usePerPrimitiveData       [[function_constant(2)]];
+constant bool bistroMode                [[function_constant(3)]];
 constant bool useResourcesBuffer = !usePerPrimitiveData;
 
 constant unsigned int primes[] = {
@@ -271,7 +272,8 @@ kernel void raytracingKernel(
      constant MTLAccelerationStructureInstanceDescriptor   *instances                 [[buffer(2)]],
      constant AreaLight                                    *areaLights                [[buffer(3)]],
      instance_acceleration_structure                        accelerationStructure     [[buffer(4)]],
-     intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]]
+     intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]],
+     constant GPUMaterial                                  *materials                 [[buffer(6), function_constant(bistroMode)]]
 )
 {
     // The sample aligns the thread count to the threadgroup size, which means the thread count
@@ -376,19 +378,47 @@ kernel void raytracingKernel(
             float3 surfaceColor = 0.0f;
 
             if (mask & GEOMETRY_MASK_TRIANGLE) {
-                Triangle triangle;
-                
                 float3 objectSpaceSurfaceNormal;
+
 #if SUPPORTS_METAL_3
-                if (usePerPrimitiveData) {
-                    // Per-primitive data points to data from the specified buffer as was configured in the MTLAccelerationStructureTriangleGeometryDescriptor.
-                    triangle = *(const device Triangle*)intersection.primitive_data;
+                if (bistroMode && usePerPrimitiveData) {
+                    // Bistro path: read GPUTriangleData from per-primitive data
+                    const device GPUTriangleData &tri = *(const device GPUTriangleData*)intersection.primitive_data;
+
+                    // Interpolate normals
+                    float3 n0 = float3(tri.normals[0][0], tri.normals[0][1], tri.normals[0][2]);
+                    float3 n1 = float3(tri.normals[1][0], tri.normals[1][1], tri.normals[1][2]);
+                    float3 n2 = float3(tri.normals[2][0], tri.normals[2][1], tri.normals[2][2]);
+                    objectSpaceSurfaceNormal = (1.0f - barycentric_coords.x - barycentric_coords.y) * n0
+                                             + barycentric_coords.x * n1
+                                             + barycentric_coords.y * n2;
+
+                    // Interpolate UVs
+                    float2 uv0 = float2(tri.uvs[0][0], tri.uvs[0][1]);
+                    float2 uv1 = float2(tri.uvs[1][0], tri.uvs[1][1]);
+                    float2 uv2 = float2(tri.uvs[2][0], tri.uvs[2][1]);
+                    float2 uv = (1.0f - barycentric_coords.x - barycentric_coords.y) * uv0
+                               + barycentric_coords.x * uv1
+                               + barycentric_coords.y * uv2;
+
+                    // Look up material and get base color
+                    constant GPUMaterial &mat = materials[tri.materialIndex];
+                    surfaceColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
+
+                    // Texture sampling placeholder — will be added in Phase 5
+
+                } else if (usePerPrimitiveData) {
+                    // Original Cornell box per-primitive path
+                    Triangle triangle = *(const device Triangle*)intersection.primitive_data;
+                    objectSpaceSurfaceNormal = interpolateVertexAttribute(triangle.normals, barycentric_coords);
+                    surfaceColor = interpolateVertexAttribute(triangle.colors, barycentric_coords);
                 } else
 #endif
                 {
                     // The ray hit a triangle. Look up the corresponding geometry's normal and UV buffers.
                     device TriangleResources & triangleResources = *(device TriangleResources *)((device char *)resources + resourcesStride * geometryIndex);
 
+                    Triangle triangle;
                     triangle.normals[0] =  triangleResources.vertexNormals[triangleResources.indices[primitiveIndex * 3 + 0]];
                     triangle.normals[1] =  triangleResources.vertexNormals[triangleResources.indices[primitiveIndex * 3 + 1]];
                     triangle.normals[2] =  triangleResources.vertexNormals[triangleResources.indices[primitiveIndex * 3 + 2]];
@@ -396,13 +426,10 @@ kernel void raytracingKernel(
                     triangle.colors[0] =  triangleResources.vertexColors[triangleResources.indices[primitiveIndex * 3 + 0]];
                     triangle.colors[1] =  triangleResources.vertexColors[triangleResources.indices[primitiveIndex * 3 + 1]];
                     triangle.colors[2] =  triangleResources.vertexColors[triangleResources.indices[primitiveIndex * 3 + 2]];
-                }
-                
-                // Interpolate the vertex normal at the intersection point.
-                objectSpaceSurfaceNormal = interpolateVertexAttribute(triangle.normals, barycentric_coords);
 
-                // Interpolate the vertex color at the intersection point.
-                surfaceColor = interpolateVertexAttribute(triangle.colors, barycentric_coords);
+                    objectSpaceSurfaceNormal = interpolateVertexAttribute(triangle.normals, barycentric_coords);
+                    surfaceColor = interpolateVertexAttribute(triangle.colors, barycentric_coords);
+                }
 
                 // Transform the normal from object to world space.
                 worldSpaceSurfaceNormal = normalize(transformDirection(objectSpaceSurfaceNormal, objectToWorldSpaceTransform));
@@ -431,29 +458,37 @@ kernel void raytracingKernel(
                 surfaceColor = sphere.color;
             }
 
-            // Choose a random light source to sample.
-            float lightSample = halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 0);
-            unsigned int lightIndex = min((unsigned int)(lightSample * uniforms.lightCount), uniforms.lightCount - 1);
-
-            // Choose a random point to sample on the light source.
-            float2 r = float2(halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 1),
-                              halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 2));
-
             float3 worldSpaceLightDirection;
             float3 lightColor;
             float lightDistance;
 
-            // Sample the lighting between the intersection point and the point on the area light.
-            sampleAreaLight(areaLights[lightIndex], r, worldSpaceIntersectionPoint, worldSpaceLightDirection,
-                            lightColor, lightDistance);
+            if (bistroMode) {
+                // Simple directional sun light for Bistro
+                worldSpaceLightDirection = normalize(float3(0.5f, 1.0f, 0.3f));
+                float NdotL = saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
+                lightColor = float3(2.0f, 1.9f, 1.7f) * NdotL;
+                lightDistance = INFINITY;
+            } else {
+                // Choose a random light source to sample.
+                float lightSample = halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 0);
+                unsigned int lightIndex = min((unsigned int)(lightSample * uniforms.lightCount), uniforms.lightCount - 1);
 
-            // Scale the light color by the cosine of the angle between the light direction and
-            // surface normal.
-            lightColor *= saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
+                // Choose a random point to sample on the light source.
+                float2 r = float2(halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 1),
+                                  halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 2));
 
-            // Scale the light color by the number of lights to compensate for the fact that
-            // the sample samples only one light source at random.
-            lightColor *= uniforms.lightCount;
+                // Sample the lighting between the intersection point and the point on the area light.
+                sampleAreaLight(areaLights[lightIndex], r, worldSpaceIntersectionPoint, worldSpaceLightDirection,
+                                lightColor, lightDistance);
+
+                // Scale the light color by the cosine of the angle between the light direction and
+                // surface normal.
+                lightColor *= saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
+
+                // Scale the light color by the number of lights to compensate for the fact that
+                // the sample samples only one light source at random.
+                lightColor *= uniforms.lightCount;
+            }
 
             // Scale the ray color by the color of the surface to simulate the surface absorbing light.
             color *= surfaceColor;
