@@ -71,6 +71,16 @@
 		A1B2C303000000000000B008 /* DDSLoader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C301000000000000F008 /* DDSLoader.mm */; };
 		A1B2C305000000000000B001 /* SceneImporter.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C305000000000000F001 /* SceneImporter.mm */; };
 		A1B2C305000000000000B002 /* SceneImporter.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C305000000000000F001 /* SceneImporter.mm */; };
+		A1B2C306000000000000B001 /* TextureAsset.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F001 /* TextureAsset.mm */; };
+		A1B2C306000000000000B002 /* TextureCache.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F002 /* TextureCache.mm */; };
+		A1B2C306000000000000B003 /* MaterialAsset.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F003 /* MaterialAsset.mm */; };
+		A1B2C306000000000000B004 /* SceneAsset.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F004 /* SceneAsset.mm */; };
+		A1B2C306000000000000B005 /* SceneLoader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F005 /* SceneLoader.mm */; };
+		A1B2C306000000000000B011 /* TextureAsset.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F001 /* TextureAsset.mm */; };
+		A1B2C306000000000000B012 /* TextureCache.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F002 /* TextureCache.mm */; };
+		A1B2C306000000000000B013 /* MaterialAsset.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F003 /* MaterialAsset.mm */; };
+		A1B2C306000000000000B014 /* SceneAsset.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F004 /* SceneAsset.mm */; };
+		A1B2C306000000000000B015 /* SceneLoader.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C306000000000000F005 /* SceneLoader.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -114,6 +124,11 @@
 		A1B2C301000000000000F007 /* imgui_impl_osx.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = imgui_impl_osx.mm; sourceTree = "<group>"; };
 		A1B2C301000000000000F008 /* DDSLoader.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DDSLoader.mm; sourceTree = "<group>"; };
 		A1B2C305000000000000F001 /* SceneImporter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneImporter.mm; sourceTree = "<group>"; };
+		A1B2C306000000000000F001 /* TextureAsset.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TextureAsset.mm; sourceTree = "<group>"; };
+		A1B2C306000000000000F002 /* TextureCache.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TextureCache.mm; sourceTree = "<group>"; };
+		A1B2C306000000000000F003 /* MaterialAsset.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MaterialAsset.mm; sourceTree = "<group>"; };
+		A1B2C306000000000000F004 /* SceneAsset.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneAsset.mm; sourceTree = "<group>"; };
+		A1B2C306000000000000F005 /* SceneLoader.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SceneLoader.mm; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -301,6 +316,11 @@
 		A1B2C304000000000000A005 /* Scene */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C306000000000000F001 /* TextureAsset.mm */,
+				A1B2C306000000000000F002 /* TextureCache.mm */,
+				A1B2C306000000000000F003 /* MaterialAsset.mm */,
+				A1B2C306000000000000F004 /* SceneAsset.mm */,
+				A1B2C306000000000000F005 /* SceneLoader.mm */,
 			);
 			path = Scene;
 			sourceTree = "<group>";
@@ -484,6 +504,11 @@
 				A1B2C302000000000000B007 /* imgui_impl_osx.mm in Sources */,
 				A1B2C302000000000000B008 /* DDSLoader.mm in Sources */,
 				A1B2C305000000000000B001 /* SceneImporter.mm in Sources */,
+				A1B2C306000000000000B001 /* TextureAsset.mm in Sources */,
+				A1B2C306000000000000B002 /* TextureCache.mm in Sources */,
+				A1B2C306000000000000B003 /* MaterialAsset.mm in Sources */,
+				A1B2C306000000000000B004 /* SceneAsset.mm in Sources */,
+				A1B2C306000000000000B005 /* SceneLoader.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -537,6 +562,11 @@
 				A1B2C303000000000000B007 /* imgui_impl_osx.mm in Sources */,
 				A1B2C303000000000000B008 /* DDSLoader.mm in Sources */,
 				A1B2C305000000000000B002 /* SceneImporter.mm in Sources */,
+				A1B2C306000000000000B011 /* TextureAsset.mm in Sources */,
+				A1B2C306000000000000B012 /* TextureCache.mm in Sources */,
+				A1B2C306000000000000B013 /* MaterialAsset.mm in Sources */,
+				A1B2C306000000000000B014 /* SceneAsset.mm in Sources */,
+				A1B2C306000000000000B015 /* SceneLoader.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -37,13 +37,13 @@ _Goal: FBX → engine-independent C++ structs._
 ## Phase 2: Runtime Scene + Textures
 _Goal: ImportedScene → engine-owned assets with loaded textures._
 
-- [ ] **2.1** Write `Scene/TextureAsset.h/mm` — wraps `id<MTLTexture>`
-- [ ] **2.2** Write `Scene/TextureCache.h/mm` — loads DDS via DDSLoader, TGA via MTKTextureLoader, deduplicates by path
-- [ ] **2.3** Write `Scene/MeshAsset.h/mm` — wraps imported mesh data, owns CPU-side arrays
-- [ ] **2.4** Write `Scene/MaterialAsset.h/mm` — resolved TextureAsset refs + PBR scalar parameters
-- [ ] **2.5** Write `Scene/SceneAsset.h/mm` — owns mesh/material/texture arrays + instance list + camera defaults
-- [ ] **2.6** Write conversion glue: `ImportedScene` → `SceneAsset` (in ViewController or a loader helper)
-- [ ] **2.7** Test: load all Bistro textures, log any missing/failed textures, verify material→texture linkage
+- [x] **2.1** Write `Scene/TextureAsset.h/mm` — wraps `id<MTLTexture>`
+- [x] **2.2** Write `Scene/TextureCache.h/mm` — loads DDS via DDSLoader, TGA via MTKTextureLoader, deduplicates by path
+- [x] **2.3** Write `Scene/MeshAsset.h/mm` — wraps imported mesh data, owns CPU-side arrays
+- [x] **2.4** Write `Scene/MaterialAsset.h/mm` — resolved TextureAsset refs + PBR scalar parameters
+- [x] **2.5** Write `Scene/SceneAsset.h/mm` — owns mesh/material/texture arrays + instance list + camera defaults
+- [x] **2.6** Write conversion glue: `ImportedScene` → `SceneAsset` (SceneLoader.h/mm)
+- [x] **2.7** Test: load all Bistro textures, log any missing/failed textures, verify material→texture linkage
 
 **STOP — wait for user review before starting Phase 3.**
 

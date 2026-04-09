@@ -3,6 +3,7 @@
 # Usage:
 #   ./run.sh              — build and run the app, console output -> log.txt
 #   ./run.sh test-import  — build and run the FBX import test, output -> log.txt
+#   ./run.sh test-scene   — build and run the full scene loading test, output -> log.txt
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -11,21 +12,38 @@ cd "$SCRIPT_DIR"
 SCHEME="macOS - Metal3 - SimplePathTracer"
 PROJECT="SimplePathTracer.xcodeproj"
 
+COMMON_SRCS="Import/SceneImporter.mm ThirdParty/ufbx/ufbx.c"
+COMMON_FLAGS="-std=c++17 -fobjc-arc -O1 -I ThirdParty/ufbx -I ThirdParty/dds_loader -I Import -I Scene"
+
 if [ "$1" = "test-import" ]; then
     echo "Building FBX import test..."
-    TOOL_BIN="$SCRIPT_DIR/Tools/build/test_import"
     mkdir -p Tools/build
-    clang++ -std=c++17 -fobjc-arc -O1 \
-        -I ThirdParty/ufbx -I Import \
-        Tools/test_import.mm Import/SceneImporter.mm ThirdParty/ufbx/ufbx.c \
+    clang++ $COMMON_FLAGS \
+        Tools/test_import.mm $COMMON_SRCS \
         -framework Foundation \
-        -o "$TOOL_BIN" 2>&1
+        -o Tools/build/test_import 2>&1
 
     FBX_PATH="${2:-$SCRIPT_DIR/Bistro_v5_2/BistroExterior.fbx}"
     echo "Running import test on $FBX_PATH"
     echo "Console output -> log.txt"
     echo "---"
-    "$TOOL_BIN" "$FBX_PATH" 2>&1 | tee log.txt
+    Tools/build/test_import "$FBX_PATH" 2>&1 | tee log.txt
+
+elif [ "$1" = "test-scene" ]; then
+    echo "Building scene loading test..."
+    mkdir -p Tools/build
+    SCENE_SRCS="Scene/TextureAsset.mm Scene/TextureCache.mm Scene/MaterialAsset.mm Scene/SceneAsset.mm Scene/SceneLoader.mm ThirdParty/dds_loader/DDSLoader.mm"
+    clang++ $COMMON_FLAGS \
+        Tools/test_scene.mm $COMMON_SRCS $SCENE_SRCS \
+        -framework Foundation -framework Metal -framework MetalKit \
+        -o Tools/build/test_scene 2>&1
+
+    FBX_PATH="${2:-$SCRIPT_DIR/Bistro_v5_2/BistroExterior.fbx}"
+    echo "Running scene test on $FBX_PATH"
+    echo "Console output -> log.txt"
+    echo "---"
+    Tools/build/test_scene "$FBX_PATH" 2>&1 | tee log.txt
+
 else
     echo "Building $SCHEME..."
     xcodebuild -project "$PROJECT" \
