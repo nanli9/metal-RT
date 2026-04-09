@@ -25,6 +25,7 @@ struct RenderOptions;
 
 @property (nonatomic) simd_float3 cameraPosition;
 @property (nonatomic) simd_float3 cameraTarget;
+@property (nonatomic) BOOL enablePBR;
 
 /// Reset frame accumulation (call when camera moves)
 - (void)resetAccumulation;

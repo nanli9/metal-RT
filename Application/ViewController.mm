@@ -172,9 +172,15 @@ The implementation of the cross-platform view controller.
         [_imguiRenderer newFrame:view];
 
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(220, 60), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoResize);
+        ImGui::SetNextWindowSize(ImVec2(240, 80), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Render Settings");
         ImGui::Text("FPS: %.1f (%.2f ms)", _fps, _fps > 0 ? 1000.0f / _fps : 0.0f);
+
+        bool pbr = _renderer.enablePBR;
+        if (ImGui::Checkbox("PBR Shading", &pbr)) {
+            _renderer.enablePBR = pbr;
+            [_renderer resetAccumulation];
+        }
         ImGui::End();
 
         id<MTLCommandBuffer> cmdBuf = [_renderer.commandQueue commandBuffer];

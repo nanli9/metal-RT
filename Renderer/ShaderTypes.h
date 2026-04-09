@@ -52,6 +52,7 @@ struct Uniforms {
     unsigned int height;
     unsigned int frameIndex;
     unsigned int lightCount;
+    unsigned int enablePBR;  // 0 = flat shading (Phase 4), 1 = full PBR
     Camera camera;
 };
 

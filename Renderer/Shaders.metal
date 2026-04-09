@@ -359,8 +359,7 @@ kernel void raytracingKernel(
      instance_acceleration_structure                        accelerationStructure     [[buffer(4)]],
      intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]],
      constant GPUMaterial                                  *materials                 [[buffer(6), function_constant(bistroMode)]],
-     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]],
-     texture2d<float>                                       environmentMap            [[texture(3), function_constant(bistroMode)]]
+     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]]
 )
 {
     // The sample aligns the thread count to the threadgroup size, which means the thread count
@@ -435,13 +434,13 @@ kernel void raytracingKernel(
             // Stop if the ray didn't hit anything and has bounced out of the scene.
             if (intersection.type == intersection_type::none) {
                 if (bistroMode) {
-                    // Sample environment map on miss
+                    // Simple procedural sky gradient
                     float3 dir = normalize(ray.direction);
-                    // Equirectangular mapping
-                    float u_env = atan2(dir.x, dir.z) / (2.0f * M_PI_F) + 0.5f;
-                    float v_env = asin(clamp(dir.y, -1.0f, 1.0f)) / M_PI_F + 0.5f;
-                    float3 envColor = environmentMap.sample(texSampler, float2(u_env, v_env)).rgb;
-                    accumulatedColor += envColor * color * 0.8f;
+                    float t = saturate(dir.y * 0.5f + 0.5f);
+                    float3 skyColor = mix(float3(0.8f, 0.85f, 0.9f),  // horizon
+                                          float3(0.4f, 0.6f, 1.0f),   // zenith
+                                          t);
+                    accumulatedColor += skyColor * color * 0.5f;
                 }
                 break;
             }
@@ -507,35 +506,40 @@ kernel void raytracingKernel(
                     // Look up material
                     constant GPUMaterial &mat = materials[tri.materialIndex];
 
-                    // Sample base color texture
-                    float3 baseColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
-                    baseColor *= sampleTexture(sceneTexArgBuf, mat.baseColorTextureIndex, uv);
+                    if (uniforms.enablePBR) {
+                        // Full PBR path: sample all textures
+                        float3 baseColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
+                        baseColor *= sampleTexture(sceneTexArgBuf, mat.baseColorTextureIndex, uv);
 
-                    // Transform normal and tangent to world space
-                    float3 worldNormal = normalize(transformDirection(objectSpaceSurfaceNormal, objectToWorldSpaceTransform));
-                    float3 worldTangent = normalize(transformDirection(objectTangent, objectToWorldSpaceTransform));
+                        float3 worldNormal = normalize(transformDirection(objectSpaceSurfaceNormal, objectToWorldSpaceTransform));
+                        float3 worldTangent = normalize(transformDirection(objectTangent, objectToWorldSpaceTransform));
 
-                    // Apply normal map (only if tangent is valid)
-                    if (mat.normalTextureIndex != 0xFFFFFFFF && length_squared(worldTangent) > 0.001f) {
-                        float3 normalMapVal = sampleTexture(sceneTexArgBuf, mat.normalTextureIndex, uv);
-                        worldNormal = applyNormalMap(normalMapVal, worldNormal, worldTangent, tangentSign);
+                        // Apply normal map (only if tangent is valid)
+                        if (mat.normalTextureIndex != 0xFFFFFFFF && length_squared(worldTangent) > 0.001f) {
+                            float3 normalMapVal = sampleTexture(sceneTexArgBuf, mat.normalTextureIndex, uv);
+                            worldNormal = applyNormalMap(normalMapVal, worldNormal, worldTangent, tangentSign);
+                        }
+
+                        // Read roughness/metalness from specular texture (R=AO, G=Roughness, B=Metalness)
+                        float roughness = mat.roughnessFactor;
+                        float metallic = mat.metallicFactor;
+                        float ao = 1.0f;
+                        if (mat.specularTextureIndex != 0xFFFFFFFF) {
+                            float3 orm = sampleTexture(sceneTexArgBuf, mat.specularTextureIndex, uv);
+                            ao = orm.x;
+                            roughness = orm.y;
+                            metallic = orm.z;
+                        }
+
+                        worldSpaceSurfaceNormal = worldNormal;
+                        surfaceColor = baseColor * ao;
+                        bistroRoughness = roughness;
+                        bistroMetallic = metallic;
+                    } else {
+                        // Simple flat shading (Phase 4 style): material base color only
+                        surfaceColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
+                        worldSpaceSurfaceNormal = normalize(transformDirection(objectSpaceSurfaceNormal, objectToWorldSpaceTransform));
                     }
-
-                    // Read roughness/metalness from specular texture (R=AO, G=Roughness, B=Metalness)
-                    float roughness = mat.roughnessFactor;
-                    float metallic = mat.metallicFactor;
-                    float ao = 1.0f;
-                    if (mat.specularTextureIndex != 0xFFFFFFFF) {
-                        float3 orm = sampleTexture(sceneTexArgBuf, mat.specularTextureIndex, uv);
-                        ao = orm.x;
-                        roughness = orm.y;
-                        metallic = orm.z;
-                    }
-
-                    worldSpaceSurfaceNormal = worldNormal;
-                    surfaceColor = baseColor * ao;
-                    bistroRoughness = roughness;
-                    bistroMetallic = metallic;
 
                 } else if (usePerPrimitiveData) {
                     // Original Cornell box per-primitive path
@@ -593,16 +597,23 @@ kernel void raytracingKernel(
             float lightDistance;
 
             if (bistroMode) {
-                // Directional sun light for Bistro with PBR evaluation
                 worldSpaceLightDirection = normalize(float3(0.5f, 1.0f, 0.3f));
-                float3 sunRadiance = float3(5.0f, 4.8f, 4.2f);
-                float3 V = -ray.direction;
-                lightColor = evaluatePBR(worldSpaceSurfaceNormal, V, worldSpaceLightDirection,
-                                        surfaceColor, bistroMetallic, bistroRoughness, sunRadiance);
-                // Ambient sky light
-                float3 ambient = surfaceColor * float3(0.3f, 0.35f, 0.5f) * (1.0f - bistroMetallic * 0.5f);
-                lightColor += ambient;
                 lightDistance = INFINITY;
+
+                if (uniforms.enablePBR) {
+                    // Full PBR evaluation
+                    float3 sunRadiance = float3(5.0f, 4.8f, 4.2f);
+                    float3 V = -ray.direction;
+                    lightColor = evaluatePBR(worldSpaceSurfaceNormal, V, worldSpaceLightDirection,
+                                            surfaceColor, bistroMetallic, bistroRoughness, sunRadiance);
+                    float3 ambient = surfaceColor * float3(0.3f, 0.35f, 0.5f) * (1.0f - bistroMetallic * 0.5f);
+                    lightColor += ambient;
+                } else {
+                    // Simple Lambertian (Phase 4 style)
+                    float NdotL = saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
+                    lightColor = float3(2.0f, 1.9f, 1.7f) * NdotL;
+                    lightColor += float3(0.3f, 0.35f, 0.5f); // ambient
+                }
             } else {
                 // Choose a random light source to sample.
                 float lightSample = halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 0);

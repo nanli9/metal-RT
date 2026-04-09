@@ -62,7 +62,6 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     bool _useBistroPath;
 
     id<MTLBuffer> _textureArgBuffer;
-    id<MTLTexture> _environmentMap;
 }
 
 - (nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device
@@ -103,6 +102,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
         _cameraPosition = sceneAsset.cameraPosition;
         _cameraTarget = sceneAsset.cameraTarget;
+        _enablePBR = YES;
 
         [self loadMetal];
         [self createBistroBuffers];
@@ -570,9 +570,6 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     // Build argument buffer for bindless texture access
     [self createTextureArgBuffer];
-
-    // Load environment map
-    [self loadEnvironmentMap];
 }
 
 - (void)createTextureArgBuffer {
@@ -593,57 +590,6 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     NSLog(@"Renderer: created texture argument buffer for %lu textures", (unsigned long)textures.count);
 }
 
-- (void)loadEnvironmentMap {
-    // Look for the HDR environment map in the Bistro folder
-    NSString *fbxDir = nil;
-    NSArray<NSString *> *args = [NSProcessInfo processInfo].arguments;
-    for (NSUInteger i = 1; i < args.count; i++) {
-        NSString *arg = args[i];
-        if (![arg hasPrefix:@"-"] && [arg caseInsensitiveCompare:@"cornell-box"] != NSOrderedSame) {
-            fbxDir = [arg stringByDeletingLastPathComponent];
-            break;
-        }
-    }
-
-    NSString *hdrPath = nil;
-    if (fbxDir) {
-        hdrPath = [fbxDir stringByAppendingPathComponent:@"san_giuseppe_bridge_4k.hdr"];
-        if (![[NSFileManager defaultManager] fileExistsAtPath:hdrPath])
-            hdrPath = nil;
-    }
-
-    if (hdrPath) {
-        NSLog(@"Renderer: loading environment map %@", hdrPath.lastPathComponent);
-        MTKTextureLoader *loader = [[MTKTextureLoader alloc] initWithDevice:_device];
-        NSDictionary *opts = @{
-            MTKTextureLoaderOptionSRGB: @NO,
-            MTKTextureLoaderOptionTextureStorageMode: @(MTLStorageModeShared),
-            MTKTextureLoaderOptionTextureUsage: @(MTLTextureUsageShaderRead),
-        };
-        NSError *error = nil;
-        _environmentMap = [loader newTextureWithContentsOfURL:[NSURL fileURLWithPath:hdrPath]
-                                                     options:opts
-                                                       error:&error];
-        if (_environmentMap) {
-            _environmentMap.label = @"Environment Map";
-            NSLog(@"Renderer: environment map loaded (%lux%lu)", (unsigned long)_environmentMap.width, (unsigned long)_environmentMap.height);
-        } else {
-            NSLog(@"Renderer: failed to load environment map: %@", error.localizedDescription);
-        }
-    }
-
-    // Fallback: create 1x1 sky color texture
-    if (!_environmentMap) {
-        MTLTextureDescriptor *desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float
-                                                                                       width:1 height:1 mipmapped:NO];
-        desc.storageMode = MTLStorageModeShared;
-        desc.usage = MTLTextureUsageShaderRead;
-        _environmentMap = [_device newTextureWithDescriptor:desc];
-        uint16_t sky[4] = {0x3666, 0x3800, 0x3CCD, 0x3C00}; // ~0.4, 0.5, 0.8, 1.0 in half float
-        [_environmentMap replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0 withBytes:sky bytesPerRow:8];
-        _environmentMap.label = @"Fallback Sky";
-    }
-}
 
 - (void)createBistroPipelines {
     _useIntersectionFunctions = false;
@@ -776,6 +722,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->frameIndex = _frameIndex++;
 
     uniforms->lightCount = _useBistroPath ? 0 : (unsigned int)_scene.lightCount;
+    uniforms->enablePBR = _enablePBR ? 1 : 0;
 
 #if !TARGET_OS_IPHONE
     [_uniformBuffer didModifyRange:NSMakeRange(_uniformBufferOffset, alignedUniformsSize)];
@@ -836,8 +783,6 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         [computeEncoder setTexture:_randomTexture atIndex:0];
         [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
         [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
-        [computeEncoder setTexture:_environmentMap atIndex:3];
-
         // Make all scene textures resident for bindless access
         for (id<MTLTexture> tex in _gpuScene.textures)
             [computeEncoder useResource:tex usage:MTLResourceUsageRead];
