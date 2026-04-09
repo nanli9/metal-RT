@@ -558,7 +558,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
 - (void)createBistroBuffers {
     NSUInteger uniformBufferSize = alignedUniformsSize * maxFramesInFlight;
-    _uniformBuffer = [_device newBufferWithLength:uniformBufferSize options:MTLResourceStorageModeShared];
+    _uniformBuffer = [_device newBufferWithLength:uniformBufferSize options:getManagedBufferStorageMode()];
 }
 
 - (void)createBistroPipelines {
