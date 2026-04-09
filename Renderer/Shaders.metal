@@ -418,6 +418,10 @@ kernel void raytracingKernel(
         bool dbgHit = false;
         float3 dbgBaseColorFactor = 0.0f;
         float3 dbgTexIndices = 0.0f; // R=hasBase, G=hasNormal, B=hasSpecular
+        float2 dbgUV = 0.0f;
+        float3 dbgBaseTexSample = 0.0f; // raw texture sample at UV
+        float dbgAO = 1.0f;
+        uint dbgBaseTexIdx = 0xFFFFFFFF;
 
         // Create an intersector to test for intersection between the ray and the geometry in the scene.
         intersector<triangle_data, instancing> i;
@@ -549,6 +553,14 @@ kernel void raytracingKernel(
                         surfaceColor = baseColor * ao;
                         bistroRoughness = roughness;
                         bistroMetallic = metallic;
+
+                        // Capture PBR debug data
+                        if (bounce == 0) {
+                            dbgUV = uv;
+                            dbgBaseTexSample = sampleTexture(sceneTexArgBuf, mat.baseColorTextureIndex, uv);
+                            dbgAO = ao;
+                            dbgBaseTexIdx = mat.baseColorTextureIndex;
+                        }
                     } else {
                         // Simple flat shading (Phase 4 style): material base color only
                         surfaceColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
@@ -764,6 +776,10 @@ kernel void raytracingKernel(
                     accumulatedColor = sceneTexArgBuf.textures[0].sample(texSampler, uv0).rgb;
                     break;
                 }
+                case 15: accumulatedColor = float3(dbgUV, 0.0f); break;                                           // UV coordinates
+                case 16: accumulatedColor = dbgBaseTexSample; break;                                               // Raw base color tex sample at actual UV
+                case 17: accumulatedColor = float3(dbgAO); break;                                                  // AO value
+                case 18: accumulatedColor = fract(float(dbgBaseTexIdx) * float3(0.17f, 0.53f, 0.91f)); break;      // Base tex index
                 default: break;
             }
         }
