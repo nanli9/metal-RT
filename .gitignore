@@ -22,6 +22,8 @@ xcuserdata/
 
 # Runtime log output
 log.txt
+# Screenshot captures
+screenshot.png
 # Test tool build artifacts
 Tools/build/
 # Xcode build artifacts
