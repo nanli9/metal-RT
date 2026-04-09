@@ -538,19 +538,18 @@ kernel void raytracingKernel(
                             worldNormal = applyNormalMap(normalMapVal, worldNormal, worldTangent, tangentSign);
                         }
 
-                        // Read roughness/metalness from specular texture (R=AO, G=Roughness, B=Metalness)
+                        // Read roughness/metalness from specular texture
+                        // Bistro packing: R=unused(0), G=Roughness, B=Metalness
                         float roughness = mat.roughnessFactor;
                         float metallic = mat.metallicFactor;
-                        float ao = 1.0f;
                         if (mat.specularTextureIndex != 0xFFFFFFFF) {
-                            float3 orm = sampleTexture(sceneTexArgBuf, mat.specularTextureIndex, uv);
-                            ao = orm.x;
-                            roughness = orm.y;
-                            metallic = orm.z;
+                            float3 spec = sampleTexture(sceneTexArgBuf, mat.specularTextureIndex, uv);
+                            roughness = spec.y;
+                            metallic = spec.z;
                         }
 
                         worldSpaceSurfaceNormal = worldNormal;
-                        surfaceColor = baseColor * ao;
+                        surfaceColor = baseColor;
                         bistroRoughness = roughness;
                         bistroMetallic = metallic;
 
@@ -558,7 +557,7 @@ kernel void raytracingKernel(
                         if (bounce == 0) {
                             dbgUV = uv;
                             dbgBaseTexSample = sampleTexture(sceneTexArgBuf, mat.baseColorTextureIndex, uv);
-                            dbgAO = ao;
+                            dbgAO = 1.0f; // AO no longer read from specular texture
                             dbgBaseTexIdx = mat.baseColorTextureIndex;
                         }
                     } else {
