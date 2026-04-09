@@ -77,28 +77,28 @@ _Goal: See textured Bistro geometry on screen._
 
 ---
 
-## Phase 5: PBR Shading + Environment
-_Goal: Correct physically-based appearance._
+## Phase 5: Camera Controls
+_Goal: Navigate through Bistro interactively._
 
-- [ ] **5.1** Add `evaluatePBR()` to shaders: GGX specular + Lambertian diffuse
-- [ ] **5.2** Add `sampleNormalMap()`: TBN transform from interpolated tangent + normal
-- [ ] **5.3** Read roughness/metalness from specular texture (R=AO, G=Roughness, B=Metalness)
-- [ ] **5.4** Load and bind HDR environment map, sample on ray miss
-- [ ] **5.5** Wire reflections toggle: skip bounce rays if `!enableReflections`
-- [ ] **5.6** Add G-buffer output textures (depth R32Float, normal RGBA16Float, albedo RGBA8Unorm) and write them in shader
-- [ ] **5.7** Test: PBR lighting correct, normal maps visible, environment in reflections
+- [ ] **5.1** Write `Scene/CameraController.h/mm` — WASD + mouse look, produces Camera struct per frame
+- [ ] **5.2** Forward keyboard/mouse events from ViewController to CameraController
+- [ ] **5.3** Renderer reads Camera from CameraController each frame, resets `_frameIndex = 0` on camera move
+- [ ] **5.4** Test: navigate through Bistro, accumulation restarts on movement
 
 **STOP — wait for user review before starting Phase 6.**
 
 ---
 
-## Phase 6: Camera Controls
-_Goal: Navigate through Bistro interactively._
+## Phase 6: PBR Shading + Environment
+_Goal: Correct physically-based appearance._
 
-- [ ] **6.1** Write `Scene/CameraController.h/mm` — WASD + mouse look, produces Camera struct per frame
-- [ ] **6.2** Forward keyboard/mouse events from ViewController to CameraController
-- [ ] **6.3** Renderer reads Camera from CameraController each frame, resets `_frameIndex = 0` on camera move
-- [ ] **6.4** Test: navigate through Bistro, accumulation restarts on movement
+- [ ] **6.1** Add `evaluatePBR()` to shaders: GGX specular + Lambertian diffuse
+- [ ] **6.2** Add `sampleNormalMap()`: TBN transform from interpolated tangent + normal
+- [ ] **6.3** Read roughness/metalness from specular texture (R=AO, G=Roughness, B=Metalness)
+- [ ] **6.4** Load and bind HDR environment map, sample on ray miss
+- [ ] **6.5** Wire reflections toggle: skip bounce rays if `!enableReflections`
+- [ ] **6.6** Add G-buffer output textures (depth R32Float, normal RGBA16Float, albedo RGBA8Unorm) and write them in shader
+- [ ] **6.7** Test: PBR lighting correct, normal maps visible, environment in reflections
 
 **STOP — wait for user review before starting Phase 7.**
 
