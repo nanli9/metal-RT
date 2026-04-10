@@ -414,7 +414,8 @@ kernel void raytracingKernel(
         uint dbgMaterialId = 0;
         uint dbgInstanceId = 0;
         float dbgNdotL = 0.0f;
-        float dbgShadow = 1.0f;
+        float dbgSunShadow = 1.0f;
+        float dbgEmissiveShadow = 0.0f; // emissive light visibility (0=no light, 1=lit)
         bool dbgHit = false;
         float2 dbgUV = 0.0f;
         float3 dbgBaseTexSample = 0.0f; // raw texture sample at UV
@@ -709,7 +710,7 @@ kernel void raytracingKernel(
                     accumulatedColor += ambient * color; // shadow: ambient only
 
                 if (bounce == 0) {
-                    dbgShadow = inShadow ? 0.0f : 1.0f;
+                    dbgSunShadow = inShadow ? 0.0f : 1.0f;
                     dbgNdotL = saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
                 }
 
@@ -757,6 +758,9 @@ kernel void raytracingKernel(
 
                         i.accept_any_intersection(true);
                         auto emShadow = i.intersect(emShadowRay, accelerationStructure, RAY_MASK_SHADOW);
+
+                        if (bounce == 0)
+                            dbgEmissiveShadow = (emShadow.type == intersection_type::none) ? 1.0f : 0.0f;
 
                         if (emShadow.type == intersection_type::none) {
                             float3 emColor = float3(emissiveLights[lightIdx].emissiveColor[0],
@@ -834,7 +838,7 @@ kernel void raytracingKernel(
                 case 4: accumulatedColor = dbgSurfaceColor; break;                                                 // Base color (no lighting)
                 case 5: accumulatedColor = dbgWorldNormal * 0.5f + 0.5f; break;                                    // World normal
                 case 6: accumulatedColor = float3(dbgNdotL); break;                                                // NdotL (no shadow)
-                case 7: accumulatedColor = float3(dbgShadow); break;                                              // Shadow visibility
+                case 7: accumulatedColor = float3(dbgSunShadow, dbgEmissiveShadow, 0.0f); break;                   // Shadow: R=sun, G=emissive
                 case 8: accumulatedColor = fract(float(dbgInstanceId) * float3(0.17f, 0.63f, 0.41f)); break;      // Instance ID
                 case 9: { // Lambert (no tex): surfaceColor * NdotL
                     float3 L = normalize(float3(-0.1803f, 0.8910f, 0.4167f));
