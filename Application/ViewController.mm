@@ -192,11 +192,12 @@ The implementation of the cross-platform view controller.
             "Off", "Primitive ID", "Material ID", "Barycentrics",
             "Base Color", "Normals", "NdotL", "Shadow", "Instance ID",
             "Lambert", "UV coords", "BaseTex@UV", "AO value", "BaseTexIdx",
-            "GBuf Depth", "GBuf Normal", "GBuf Albedo", "Denoise Weight"
+            "GBuf Depth", "GBuf Normal", "GBuf Albedo", "Denoise Weight",
+            "Motion Vectors", "SVGF Variance"
         };
-        if (ImGui::Combo("Debug View", &opts.debugMode, debugItems, 18)) rtChanged = true;
+        if (ImGui::Combo("Debug View", &opts.debugMode, debugItems, 20)) rtChanged = true;
 
-        const char *denoiserItems[] = { "Off", "A-Trous", "SVGF (coming soon)" };
+        const char *denoiserItems[] = { "Off", "A-Trous", "SVGF" };
         int denoiserIdx = static_cast<int>(opts.denoiserMode);
         if (ImGui::Combo("Denoiser", &denoiserIdx, denoiserItems, 3)) {
             opts.denoiserMode = static_cast<DenoiserMode>(denoiserIdx);

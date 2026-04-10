@@ -138,13 +138,13 @@ _Goal: Edge-aware spatial denoiser using G-buffer data, toggleable via ImGui._
 ## Phase 8 Lower: SVGF (Spatiotemporal Variance-Guided Filtering)
 _Goal: Temporal reprojection + variance-guided filtering for superior denoising._
 
-- [ ] **8.11** Store view-projection matrices in Uniforms (current + previous + inverse). Add matrix helper functions.
-- [ ] **8.12** Write `computeMotionVectors` compute kernel. Reads G-buffer depth, reprojects via prev VP matrix, outputs to `RG16Float` texture. Add debug mode 18 "Motion Vectors".
-- [ ] **8.13** Allocate SVGF temporal textures: color history x2, moment history x2, history length, variance.
-- [ ] **8.14** Write `svgfTemporalAccumulation` kernel. Reproject, validate, blend with history. Add `denoiserMode` to Uniforms to skip built-in accumulation when SVGF active.
-- [ ] **8.15** Write `svgfEstimateVariance` kernel. Compute variance from moments, spatial fallback for short history. Add debug mode 19 "SVGF Variance".
-- [ ] **8.16** Write `svgfAtrousFilter` kernel. Color sigma modulated by local variance. Same iterative dispatch as A-trous.
-- [ ] **8.17** Firefly clamping, proper history reset, un-gray SVGF in ImGui, clean mode switching.
+- [x] **8.11** Store view-projection matrices in Uniforms (current + previous + inverse). Add matrix helper functions. Add `denoiserMode` to Uniforms, skip accumulation when SVGF active.
+- [x] **8.12** Write `computeMotionVectors` compute kernel. Reads G-buffer depth, reprojects via prev VP matrix, outputs to `RG16Float` texture. Add debug mode 18 "Motion Vectors".
+- [x] **8.13** Allocate SVGF temporal textures: color history x2, moment history x2, history length, variance, prev G-buffer copies.
+- [x] **8.14** Write `svgfTemporalAccumulation` kernel. Reproject, validate, blend with history.
+- [x] **8.15** Write `svgfEstimateVariance` kernel. Compute variance from moments, spatial fallback for short history. Add debug mode 19 "SVGF Variance".
+- [x] **8.16** Write `svgfAtrousFilter` kernel. Color sigma modulated by local variance. Same iterative dispatch as A-trous.
+- [x] **8.17** Firefly clamping, G-buffer copy for prev frame, history reset on camera move, un-gray SVGF in ImGui.
 
 **STOP — wait for user review before starting Phase 9.**
 

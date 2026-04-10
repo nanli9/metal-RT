@@ -60,7 +60,11 @@ struct Uniforms {
     float emissiveTotalWeight; // sum of all emissive triangle weights for PDF
     unsigned int enableShadows;
     unsigned int enableReflections;
+    unsigned int denoiserMode; // 0=Off, 1=ATrous, 2=SVGF
     Camera camera;
+    matrix_float4x4 viewProjectionMatrix;
+    matrix_float4x4 prevViewProjectionMatrix;
+    matrix_float4x4 inverseViewProjectionMatrix;
 };
 
 struct Sphere {

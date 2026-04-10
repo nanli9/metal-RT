@@ -38,3 +38,31 @@ matrix_float4x4 matrix4x4_scale(float sx, float sy, float sz) {
         { 0,   0,  0,  1 }
     }};
 }
+
+matrix_float4x4 matrix4x4_perspective(float fovY, float aspect, float nearZ, float farZ) {
+    float ys = 1.0f / tanf(fovY * 0.5f);
+    float xs = ys / aspect;
+    float zs = farZ / (nearZ - farZ);
+    return (matrix_float4x4) {{
+        { xs,  0,           0,  0 },
+        {  0, ys,           0,  0 },
+        {  0,  0,          zs, -1 },
+        {  0,  0, nearZ * zs,  0 }
+    }};
+}
+
+matrix_float4x4 matrix4x4_look_at(vector_float3 eye, vector_float3 target, vector_float3 up) {
+    vector_float3 z = vector_normalize(eye - target); // forward points from target to eye (RH)
+    vector_float3 x = vector_normalize(vector_cross(up, z));
+    vector_float3 y = vector_cross(z, x);
+    return (matrix_float4x4) {{
+        { x.x, y.x, z.x, 0 },
+        { x.y, y.y, z.y, 0 },
+        { x.z, y.z, z.z, 0 },
+        { -simd_dot(x, eye), -simd_dot(y, eye), -simd_dot(z, eye), 1 }
+    }};
+}
+
+matrix_float4x4 matrix4x4_inverse(matrix_float4x4 m) {
+    return simd_inverse(m);
+}

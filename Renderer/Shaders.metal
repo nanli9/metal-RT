@@ -912,13 +912,16 @@ kernel void raytracingKernel(
             }
         }
 
-        // Average this frame's sample with all of the previous frames.
-        if (uniforms.frameIndex > 0) {
-            float3 prevColor = prevTex.read(tid).xyz;
-            prevColor *= uniforms.frameIndex;
+        // When SVGF is active, output raw 1-spp color (SVGF handles its own temporal accumulation).
+        // Otherwise, use the built-in running average.
+        if (uniforms.denoiserMode != 2) {
+            if (uniforms.frameIndex > 0) {
+                float3 prevColor = prevTex.read(tid).xyz;
+                prevColor *= uniforms.frameIndex;
 
-            accumulatedColor += prevColor;
-            accumulatedColor /= (uniforms.frameIndex + 1);
+                accumulatedColor += prevColor;
+                accumulatedColor /= (uniforms.frameIndex + 1);
+            }
         }
 
         dstTex.write(float4(accumulatedColor, 1.0f), tid);
@@ -1048,4 +1051,288 @@ kernel void atrousDenoiser(
     }
 
     outputColor.write(float4(result, 1.0f), tid);
+}
+
+// ---- Motion Vector Computation ----
+// Reconstructs world position from G-buffer depth, reprojects to previous frame screen position.
+// Outputs screen-space motion vector in pixels.
+
+kernel void computeMotionVectors(
+    uint2                           tid            [[thread_position_in_grid]],
+    constant Uniforms              &uniforms       [[buffer(0)]],
+    texture2d<float>                depthTex       [[texture(0)]],
+    texture2d<float, access::write> motionTex      [[texture(1)]]
+)
+{
+    if (tid.x >= uniforms.width || tid.y >= uniforms.height) return;
+
+    float depth = depthTex.read(tid).x;
+
+    // Sky pixels have no meaningful motion vector
+    if (depth >= 1e10f) {
+        motionTex.write(float4(0, 0, 0, 0), tid);
+        return;
+    }
+
+    // Current pixel in NDC: map [0,W)x[0,H) → [-1,1]x[-1,1]
+    float2 pixelCenter = float2(tid) + 0.5f;
+    float2 ndc = pixelCenter / float2(uniforms.width, uniforms.height) * 2.0f - 1.0f;
+    // Metal NDC: y goes from -1 (bottom) to 1 (top), and z is in [0,1] for perspective
+    // Our projection maps near→0, far→1, but depth here is ray distance, not z-buffer depth.
+    // We need to reconstruct world position using inverse VP.
+
+    // Reconstruct clip-space position. We need to go from screen-space + depth to clip-space.
+    // Since the RT kernel uses camera rays (not projection), reconstruct world pos directly:
+    // worldPos = cameraPos + rayDir * depth
+    // rayDir for pixel (x,y) = normalize(uv.x * right + uv.y * up + forward)
+    // where uv = pixel/resolution * 2 - 1, and right/up are already scaled by image plane
+
+    float3 rayDir = normalize(ndc.x * uniforms.camera.right +
+                              ndc.y * uniforms.camera.up +
+                              uniforms.camera.forward);
+    float3 worldPos = uniforms.camera.position + rayDir * depth;
+
+    // Project to previous frame screen space using the previous VP matrix.
+    // The VP matrix and the RT kernel use consistent conventions:
+    // ndc.y=-1 corresponds to tid.y=0 (top of texture) in both systems.
+    float4 prevClip = uniforms.prevViewProjectionMatrix * float4(worldPos, 1.0f);
+    float2 prevNDC = prevClip.xy / prevClip.w;
+    float2 prevPixel = (prevNDC * 0.5f + 0.5f) * float2(uniforms.width, uniforms.height);
+
+    // Motion vector = previous pixel position - current pixel position (in pixels)
+    float2 motion = prevPixel - pixelCenter;
+
+    motionTex.write(float4(motion, 0, 0), tid);
+}
+
+// ---- SVGF Temporal Accumulation ----
+// Reprojects current pixel to previous frame, validates temporal neighbor,
+// blends color and accumulates luminance moments for variance estimation.
+
+kernel void svgfTemporalAccumulation(
+    uint2                           tid            [[thread_position_in_grid]],
+    constant Uniforms              &uniforms       [[buffer(0)]],
+    texture2d<float>                currentColor   [[texture(0)]],  // raw 1-spp from RT
+    texture2d<float>                motionTex      [[texture(1)]],
+    texture2d<float>                depthTex       [[texture(2)]],  // current depth
+    texture2d<float>                normalTex      [[texture(3)]],  // current normal
+    texture2d<float>                prevDepthTex   [[texture(4)]],  // previous frame depth
+    texture2d<float>                prevNormalTex  [[texture(5)]],  // previous frame normal
+    texture2d<float>                prevColorHist  [[texture(6)]],  // previous color history
+    texture2d<float>                prevMomentHist [[texture(7)]],  // previous moment history
+    texture2d<float>                prevHistLen    [[texture(8)]],  // previous history length
+    texture2d<float, access::write> outColorHist   [[texture(9)]],  // output color history
+    texture2d<float, access::write> outMomentHist  [[texture(10)]], // output moment history
+    texture2d<float, access::write> outHistLen     [[texture(11)]]  // output history length
+)
+{
+    if (tid.x >= uniforms.width || tid.y >= uniforms.height) return;
+
+    float3 color = currentColor.read(tid).xyz;
+
+    // Firefly clamping: clamp extremely bright samples to prevent flicker
+    float rawLum = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    float maxLum = 10.0f; // clamp threshold
+    if (rawLum > maxLum) {
+        color *= maxLum / rawLum;
+    }
+
+    float  depth = depthTex.read(tid).x;
+    float3 normal = normalTex.read(tid).xyz * 2.0f - 1.0f;
+    float  lum = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+
+    // Sky: no temporal accumulation
+    if (depth >= 1e10f) {
+        outColorHist.write(float4(color, 1.0f), tid);
+        outMomentHist.write(float4(lum, lum * lum, 0, 0), tid);
+        outHistLen.write(float4(1.0f, 0, 0, 0), tid);
+        return;
+    }
+
+    // Read motion vector and compute reprojected position
+    float2 motion = motionTex.read(tid).xy;
+    float2 prevPixel = float2(tid) + 0.5f + motion;
+
+    // Check if reprojected position is within screen bounds
+    bool valid = prevPixel.x >= 0 && prevPixel.x < float(uniforms.width) &&
+                 prevPixel.y >= 0 && prevPixel.y < float(uniforms.height);
+
+    if (valid) {
+        uint2 prevTid = uint2(clamp(prevPixel, float2(0), float2(uniforms.width - 1, uniforms.height - 1)));
+
+        // Validate temporal neighbor: depth and normal consistency
+        float prevDepth = prevDepthTex.read(prevTid).x;
+        float3 prevNormal = prevNormalTex.read(prevTid).xyz * 2.0f - 1.0f;
+
+        float depthDiff = abs(depth - prevDepth) / max(depth, prevDepth + 1e-6f);
+        float normalDot = max(dot(normal, prevNormal), 0.0f);
+
+        // Reject if depth differs by >20% or normals diverge significantly
+        valid = (depthDiff < 0.2f) && (normalDot > 0.8f) && (prevDepth < 1e10f);
+    }
+
+    if (valid) {
+        uint2 prevTid = uint2(clamp(prevPixel, float2(0), float2(uniforms.width - 1, uniforms.height - 1)));
+
+        float3 histColor = prevColorHist.read(prevTid).xyz;
+        float2 histMoments = prevMomentHist.read(prevTid).xy;
+        float  histLen = prevHistLen.read(prevTid).x;
+
+        // Exponential moving average: increase history length, compute blend alpha
+        float newHistLen = min(histLen + 1.0f, 256.0f); // cap at 256 frames for smooth convergence
+        float alpha = 1.0f / newHistLen;                  // decreasing alpha for smooth averaging
+
+        // Blend color
+        float3 blendedColor = mix(histColor, color, alpha);
+
+        // Blend moments
+        float2 newMoments = float2(lum, lum * lum);
+        float2 blendedMoments = mix(histMoments, newMoments, alpha);
+
+        outColorHist.write(float4(blendedColor, 1.0f), tid);
+        outMomentHist.write(float4(blendedMoments, 0, 0), tid);
+        outHistLen.write(float4(newHistLen, 0, 0, 0), tid);
+    } else {
+        // Disoccluded: reset to current sample
+        outColorHist.write(float4(color, 1.0f), tid);
+        outMomentHist.write(float4(lum, lum * lum, 0, 0), tid);
+        outHistLen.write(float4(1.0f, 0, 0, 0), tid);
+    }
+}
+
+// ---- SVGF Variance Estimation ----
+// Computes per-pixel variance from accumulated luminance moments.
+// For short-history pixels, uses spatial fallback (3x3 neighborhood average).
+
+kernel void svgfEstimateVariance(
+    uint2                           tid        [[thread_position_in_grid]],
+    constant Uniforms              &uniforms   [[buffer(0)]],
+    texture2d<float>                momentTex  [[texture(0)]],
+    texture2d<float>                histLenTex [[texture(1)]],
+    texture2d<float, access::write> varianceTex [[texture(2)]]
+)
+{
+    if (tid.x >= uniforms.width || tid.y >= uniforms.height) return;
+
+    float2 moments = momentTex.read(tid).xy;
+    float histLen = histLenTex.read(tid).x;
+
+    // Variance = E[x^2] - E[x]^2
+    float variance = max(moments.y - moments.x * moments.x, 0.0f);
+
+    // For short history (< 4 frames), use spatial fallback to stabilize variance estimate
+    if (histLen < 4.0f) {
+        float sumVariance = 0.0f;
+        float count = 0.0f;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int2 sp = clamp(int2(tid) + int2(dx, dy), int2(0), int2(uniforms.width - 1, uniforms.height - 1));
+                float2 sm = momentTex.read(uint2(sp)).xy;
+                float sv = max(sm.y - sm.x * sm.x, 0.0f);
+                sumVariance += sv;
+                count += 1.0f;
+            }
+        }
+        variance = sumVariance / count;
+    }
+
+    varianceTex.write(float4(variance, 0, 0, 0), tid);
+}
+
+// ---- SVGF Variance-Guided A-trous Filter ----
+// Same structure as standard A-trous, but color sigma is modulated by local variance.
+// High-variance areas get more aggressive filtering, converged areas stay sharp.
+
+kernel void svgfAtrousFilter(
+    uint2                           tid            [[thread_position_in_grid]],
+    constant DenoiserParams        &params         [[buffer(0)]],
+    texture2d<float>                inputColor     [[texture(0)]],
+    texture2d<float, access::write> outputColor    [[texture(1)]],
+    texture2d<float>                depthTex       [[texture(2)]],
+    texture2d<float>                normalTex      [[texture(3)]],
+    texture2d<float>                albedoTex      [[texture(4)]],
+    texture2d<float>                varianceTex    [[texture(5)]]
+)
+{
+    if (tid.x >= params.width || tid.y >= params.height) return;
+
+    float3 centerColor = inputColor.read(tid).xyz;
+    float  centerDepth = depthTex.read(tid).x;
+    float3 centerNormal = normalTex.read(tid).xyz * 2.0f - 1.0f;
+    float  centerLum = dot(centerColor, float3(0.2126f, 0.7152f, 0.0722f));
+    float  variance = varianceTex.read(tid).x;
+
+    if (centerDepth >= 1e10f) {
+        outputColor.write(float4(centerColor, 1.0f), tid);
+        return;
+    }
+
+    // Variance-guided color sigma: more filtering where variance is high
+    float sigmaL = params.sigmaColor * sqrt(max(variance, 0.0f) + 1e-6f);
+
+    float3 colorSum = float3(0.0f);
+    float weightSum = 0.0f;
+    int step = int(params.stepSize);
+
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            int2 samplePos = int2(tid) + int2(dx, dy) * step;
+            samplePos = clamp(samplePos, int2(0), int2(params.width - 1, params.height - 1));
+            uint2 sp = uint2(samplePos);
+
+            float3 sampleColor = inputColor.read(sp).xyz;
+            float  sampleDepth = depthTex.read(sp).x;
+            float3 sampleNormal = normalTex.read(sp).xyz * 2.0f - 1.0f;
+            float  sampleLum = dot(sampleColor, float3(0.2126f, 0.7152f, 0.0722f));
+
+            float kernelWeight = atrousKernel[dy + 2] * atrousKernel[dx + 2];
+
+            float lumDiff = abs(centerLum - sampleLum);
+            float wColor = exp(-lumDiff / (sigmaL + 1e-6f));
+
+            float normalDot = max(dot(centerNormal, sampleNormal), 0.0f);
+            float wNormal = pow(normalDot, params.sigmaNormal);
+
+            float depthDiff = abs(centerDepth - sampleDepth) / (centerDepth + 1e-6f);
+            float wDepth = exp(-depthDiff / (params.sigmaDepth + 1e-6f));
+
+            float w = kernelWeight * wColor * wNormal * wDepth;
+            colorSum += sampleColor * w;
+            weightSum += w;
+        }
+    }
+
+    float3 result = colorSum / max(weightSum, 1e-6f);
+    outputColor.write(float4(result, 1.0f), tid);
+}
+
+// Debug visualization for motion vectors — renders motion as color
+kernel void debugMotionVectors(
+    uint2                           tid        [[thread_position_in_grid]],
+    constant Uniforms              &uniforms   [[buffer(0)]],
+    texture2d<float>                motionTex  [[texture(0)]],
+    texture2d<float, access::write> outputTex  [[texture(1)]]
+)
+{
+    if (tid.x >= uniforms.width || tid.y >= uniforms.height) return;
+    float2 mv = motionTex.read(tid).xy;
+    float3 color = float3(abs(mv.x) * 0.1f, abs(mv.y) * 0.1f, 0.0f);
+    outputTex.write(float4(saturate(color), 1.0f), tid);
+}
+
+// Debug visualization for SVGF variance — renders variance as grayscale heat
+kernel void debugVariance(
+    uint2                           tid        [[thread_position_in_grid]],
+    constant Uniforms              &uniforms   [[buffer(0)]],
+    texture2d<float>                varTex     [[texture(0)]],
+    texture2d<float, access::write> outputTex  [[texture(1)]]
+)
+{
+    if (tid.x >= uniforms.width || tid.y >= uniforms.height) return;
+    float v = varTex.read(tid).x;
+    // Scale variance for visualization (0-1 range, boosted)
+    float viz = saturate(v * 10.0f);
+    // Heat map: low=blue, mid=green, high=red
+    float3 color = float3(saturate(viz * 2.0f - 1.0f), saturate(1.0f - abs(viz * 2.0f - 1.0f)), saturate(1.0f - viz * 2.0f));
+    outputTex.write(float4(color, 1.0f), tid);
 }

@@ -47,6 +47,24 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     id <MTLComputePipelineState> _atrousDenoiserPipeline;
     id <MTLTexture> _denoiserPingPong[2]; // RGBA32Float ping-pong for iterative filtering
 
+    // Motion vectors (for SVGF)
+    id <MTLComputePipelineState> _motionVectorPipeline;
+    id <MTLComputePipelineState> _debugMotionVectorPipeline;
+    id <MTLTexture> _motionVectorTexture; // RG16Float
+
+    // SVGF temporal textures
+    id <MTLComputePipelineState> _svgfTemporalPipeline;
+    id <MTLComputePipelineState> _svgfVariancePipeline;
+    id <MTLComputePipelineState> _svgfAtrousPipeline;
+    id <MTLComputePipelineState> _debugVariancePipeline;
+    id <MTLTexture> _svgfColorHistory[2];   // RGBA32Float ping-pong
+    id <MTLTexture> _svgfMomentHistory[2];  // RG32Float ping-pong (mean lum, mean lum^2)
+    id <MTLTexture> _svgfHistoryLength[2];   // R16Float ping-pong (frames accumulated per pixel)
+    id <MTLTexture> _svgfVariance;          // R32Float
+    id <MTLTexture> _prevGbufferDepth;      // R32Float (previous frame)
+    id <MTLTexture> _prevGbufferNormal;     // RGBA16Float (previous frame)
+    unsigned int _svgfHistoryIndex;         // ping-pong index for SVGF history
+
     id <MTLBuffer> _resourceBuffer;
     id <MTLBuffer> _instanceBuffer;
 
@@ -71,6 +89,11 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     bool _useBistroPath;
 
     id<MTLBuffer> _textureArgBuffer;
+
+    // View-projection matrices for SVGF motion vectors
+    matrix_float4x4 _prevViewProjectionMatrix;
+    bool _hasPrevViewProjectionMatrix;
+    bool _svgfNeedsClear; // flag to clear SVGF history on next frame
 }
 
 - (nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device
@@ -123,6 +146,8 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
 - (void)resetAccumulation {
     _frameIndex = 0;
+    _svgfNeedsClear = true;
+    _hasPrevViewProjectionMatrix = false;
 }
 
 - (id<MTLCommandQueue>)commandQueue {
@@ -303,6 +328,42 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     NSAssert(atrousFunction, @"Failed to find atrousDenoiser function");
     _atrousDenoiserPipeline = [_device newComputePipelineStateWithFunction:atrousFunction error:&error];
     NSAssert(_atrousDenoiserPipeline, @"Failed to create A-trous denoiser pipeline: %@", error);
+
+    // Motion vector pipeline
+    id<MTLFunction> motionFunction = [_library newFunctionWithName:@"computeMotionVectors"];
+    NSAssert(motionFunction, @"Failed to find computeMotionVectors function");
+    _motionVectorPipeline = [_device newComputePipelineStateWithFunction:motionFunction error:&error];
+    NSAssert(_motionVectorPipeline, @"Failed to create motion vector pipeline: %@", error);
+
+    id<MTLFunction> debugMVFunction = [_library newFunctionWithName:@"debugMotionVectors"];
+    _debugMotionVectorPipeline = [_device newComputePipelineStateWithFunction:debugMVFunction error:&error];
+
+    [self createSVGFPipelines];
+}
+
+- (void)createSVGFPipelines {
+    NSError *error;
+    id<MTLFunction> fn;
+
+    fn = [_library newFunctionWithName:@"svgfTemporalAccumulation"];
+    NSAssert(fn, @"Failed to find svgfTemporalAccumulation");
+    _svgfTemporalPipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
+    NSAssert(_svgfTemporalPipeline, @"Failed to create SVGF temporal pipeline: %@", error);
+
+    fn = [_library newFunctionWithName:@"svgfEstimateVariance"];
+    if (fn) {
+        _svgfVariancePipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
+    }
+
+    fn = [_library newFunctionWithName:@"svgfAtrousFilter"];
+    if (fn) {
+        _svgfAtrousPipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
+    }
+
+    fn = [_library newFunctionWithName:@"debugVariance"];
+    if (fn) {
+        _debugVariancePipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
+    }
 }
 
 // Create an argument encoder that encodes references to a set of resources into a buffer.
@@ -660,6 +721,17 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     NSAssert(atrousFunction, @"Failed to find atrousDenoiser function");
     _atrousDenoiserPipeline = [_device newComputePipelineStateWithFunction:atrousFunction error:&error];
     NSAssert(_atrousDenoiserPipeline, @"Failed to create A-trous denoiser pipeline: %@", error);
+
+    // Motion vector pipeline
+    id<MTLFunction> motionFunction = [_library newFunctionWithName:@"computeMotionVectors"];
+    NSAssert(motionFunction, @"Failed to find computeMotionVectors function");
+    _motionVectorPipeline = [_device newComputePipelineStateWithFunction:motionFunction error:&error];
+    NSAssert(_motionVectorPipeline, @"Failed to create motion vector pipeline: %@", error);
+
+    id<MTLFunction> debugMVFunction = [_library newFunctionWithName:@"debugMotionVectors"];
+    _debugMotionVectorPipeline = [_device newComputePipelineStateWithFunction:debugMVFunction error:&error];
+
+    [self createSVGFPipelines];
 }
 
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size
@@ -692,10 +764,39 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     textureDescriptor.pixelFormat = MTLPixelFormatRGBA8Unorm;
     _gbufferAlbedo = [_device newTextureWithDescriptor:textureDescriptor];
 
+    // Motion vector texture (screen-space 2D vectors in pixels)
+    textureDescriptor.pixelFormat = MTLPixelFormatRG16Float;
+    _motionVectorTexture = [_device newTextureWithDescriptor:textureDescriptor];
+
     // Denoiser ping-pong textures (same format as accumulation targets)
     textureDescriptor.pixelFormat = MTLPixelFormatRGBA32Float;
     for (NSUInteger i = 0; i < 2; i++)
         _denoiserPingPong[i] = [_device newTextureWithDescriptor:textureDescriptor];
+
+    // SVGF temporal textures
+    textureDescriptor.pixelFormat = MTLPixelFormatRGBA32Float;
+    for (NSUInteger i = 0; i < 2; i++)
+        _svgfColorHistory[i] = [_device newTextureWithDescriptor:textureDescriptor];
+
+    textureDescriptor.pixelFormat = MTLPixelFormatRG32Float;
+    for (NSUInteger i = 0; i < 2; i++)
+        _svgfMomentHistory[i] = [_device newTextureWithDescriptor:textureDescriptor];
+
+    textureDescriptor.pixelFormat = MTLPixelFormatR16Float;
+    for (NSUInteger i = 0; i < 2; i++)
+        _svgfHistoryLength[i] = [_device newTextureWithDescriptor:textureDescriptor];
+
+    textureDescriptor.pixelFormat = MTLPixelFormatR32Float;
+    _svgfVariance = [_device newTextureWithDescriptor:textureDescriptor];
+
+    // Previous frame G-buffer copies (for SVGF temporal validation)
+    textureDescriptor.pixelFormat = MTLPixelFormatR32Float;
+    _prevGbufferDepth = [_device newTextureWithDescriptor:textureDescriptor];
+
+    textureDescriptor.pixelFormat = MTLPixelFormatRGBA16Float;
+    _prevGbufferNormal = [_device newTextureWithDescriptor:textureDescriptor];
+
+    _svgfHistoryIndex = 0;
 
     // Create a texture that contains a random integer value for each pixel. The sample
     // uses these values to decorrelate pixels while drawing pseudorandom numbers from the
@@ -777,6 +878,25 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->emissiveTotalWeight = _useBistroPath ? _gpuScene.emissiveTotalWeight : 0.0f;
     uniforms->enableShadows = _renderOptions.enableShadows ? 1 : 0;
     uniforms->enableReflections = _renderOptions.enableReflections ? 1 : 0;
+    uniforms->denoiserMode = static_cast<unsigned int>(_renderOptions.denoiserMode);
+
+    // Compute view-projection matrices for SVGF motion vectors
+    {
+        matrix_float4x4 viewMatrix = matrix4x4_look_at(position, target, up);
+        matrix_float4x4 projMatrix = matrix4x4_perspective(fieldOfView, aspectRatio, 0.1f, 1000.0f);
+        matrix_float4x4 vpMatrix = simd_mul(projMatrix, viewMatrix);
+
+        uniforms->viewProjectionMatrix = vpMatrix;
+        uniforms->inverseViewProjectionMatrix = matrix4x4_inverse(vpMatrix);
+
+        if (_hasPrevViewProjectionMatrix) {
+            uniforms->prevViewProjectionMatrix = _prevViewProjectionMatrix;
+        } else {
+            uniforms->prevViewProjectionMatrix = vpMatrix;
+        }
+        _prevViewProjectionMatrix = vpMatrix;
+        _hasPrevViewProjectionMatrix = true;
+    }
 
 #if !TARGET_OS_IPHONE
     [_uniformBuffer didModifyRange:NSMakeRange(_uniformBufferOffset, alignedUniformsSize)];
@@ -887,8 +1007,124 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // Swap the source and destination accumulation targets for the next frame.
     std::swap(_accumulationTargets[0], _accumulationTargets[1]);
 
+    // ---- Motion Vector Pass (needed for SVGF) ----
+    {
+        id<MTLComputeCommandEncoder> mvEncoder = [commandBuffer computeCommandEncoder];
+        [mvEncoder setComputePipelineState:_motionVectorPipeline];
+        [mvEncoder setBuffer:_uniformBuffer offset:_uniformBufferOffset atIndex:0];
+        [mvEncoder setTexture:_gbufferDepth atIndex:0];
+        [mvEncoder setTexture:_motionVectorTexture atIndex:1];
+        [mvEncoder dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
+        [mvEncoder endEncoding];
+    }
+
     // The texture that the tone-map pass will read from (may be overridden by denoiser)
     id<MTLTexture> finalColorSource = _accumulationTargets[0];
+
+    // ---- Debug: Motion Vector Visualization (mode 18) ----
+    if (_renderOptions.debugMode == 18 && _debugMotionVectorPipeline) {
+        id<MTLComputeCommandEncoder> dbgEncoder = [commandBuffer computeCommandEncoder];
+        [dbgEncoder setComputePipelineState:_debugMotionVectorPipeline];
+        [dbgEncoder setBuffer:_uniformBuffer offset:_uniformBufferOffset atIndex:0];
+        [dbgEncoder setTexture:_motionVectorTexture atIndex:0];
+        [dbgEncoder setTexture:_accumulationTargets[0] atIndex:1];
+        [dbgEncoder dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
+        [dbgEncoder endEncoding];
+    }
+
+    // ---- Debug: SVGF Variance Visualization (mode 19) ----
+    if (_renderOptions.debugMode == 19 && _debugVariancePipeline) {
+        id<MTLComputeCommandEncoder> dbgEncoder = [commandBuffer computeCommandEncoder];
+        [dbgEncoder setComputePipelineState:_debugVariancePipeline];
+        [dbgEncoder setBuffer:_uniformBuffer offset:_uniformBufferOffset atIndex:0];
+        [dbgEncoder setTexture:_svgfVariance atIndex:0];
+        [dbgEncoder setTexture:_accumulationTargets[0] atIndex:1];
+        [dbgEncoder dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
+        [dbgEncoder endEncoding];
+    }
+
+    // ---- SVGF Denoiser Pass ----
+    if (_renderOptions.denoiserMode == DenoiserMode::SVGF && _svgfTemporalPipeline) {
+        // On reset: the temporal kernel handles disocclusion gracefully —
+        // mismatched prev G-buffer depth/normal causes fallback to current sample.
+        _svgfNeedsClear = false;
+
+        unsigned int cur = _svgfHistoryIndex;
+        unsigned int prev = 1 - cur;
+
+        // Step 1: Temporal accumulation
+        {
+            id<MTLComputeCommandEncoder> enc = [commandBuffer computeCommandEncoder];
+            [enc setComputePipelineState:_svgfTemporalPipeline];
+            [enc setBuffer:_uniformBuffer offset:_uniformBufferOffset atIndex:0];
+            [enc setTexture:_accumulationTargets[0] atIndex:0]; // current 1-spp color
+            [enc setTexture:_motionVectorTexture atIndex:1];
+            [enc setTexture:_gbufferDepth atIndex:2];
+            [enc setTexture:_gbufferNormal atIndex:3];
+            [enc setTexture:_prevGbufferDepth atIndex:4];
+            [enc setTexture:_prevGbufferNormal atIndex:5];
+            [enc setTexture:_svgfColorHistory[prev] atIndex:6];
+            [enc setTexture:_svgfMomentHistory[prev] atIndex:7];
+            [enc setTexture:_svgfHistoryLength[prev] atIndex:8];
+            [enc setTexture:_svgfColorHistory[cur] atIndex:9];
+            [enc setTexture:_svgfMomentHistory[cur] atIndex:10];
+            [enc setTexture:_svgfHistoryLength[cur] atIndex:11];
+            [enc dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
+            [enc endEncoding];
+        }
+
+        // Step 2: Variance estimation (if pipeline exists)
+        if (_svgfVariancePipeline) {
+            id<MTLComputeCommandEncoder> enc = [commandBuffer computeCommandEncoder];
+            [enc setComputePipelineState:_svgfVariancePipeline];
+            [enc setBuffer:_uniformBuffer offset:_uniformBufferOffset atIndex:0];
+            [enc setTexture:_svgfMomentHistory[cur] atIndex:0];
+            [enc setTexture:_svgfHistoryLength[cur] atIndex:1];
+            [enc setTexture:_svgfVariance atIndex:2];
+            [enc dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
+            [enc endEncoding];
+        }
+
+        // Step 3: Variance-guided A-trous filter (if pipeline exists)
+        if (_svgfAtrousPipeline) {
+            id<MTLComputeCommandEncoder> enc = [commandBuffer computeCommandEncoder];
+            [enc setComputePipelineState:_svgfAtrousPipeline];
+
+            int iterations = _renderOptions.atrousIterations;
+            for (int iter = 0; iter < iterations; iter++) {
+                id<MTLTexture> input = (iter == 0) ? _svgfColorHistory[cur] : _denoiserPingPong[(iter - 1) % 2];
+                id<MTLTexture> output = _denoiserPingPong[iter % 2];
+
+                DenoiserParams params;
+                params.stepSize = 1 << iter;
+                params.sigmaColor = _renderOptions.denoiseSigmaColor;
+                params.sigmaNormal = _renderOptions.denoiseSigmaNormal;
+                params.sigmaDepth = _renderOptions.denoiseSigmaDepth;
+                params.width = (unsigned int)width;
+                params.height = (unsigned int)height;
+                params.temporalBlend = 0.0f; // no temporal fade for SVGF
+                params.isLastIteration = 0;
+
+                [enc setBytes:&params length:sizeof(params) atIndex:0];
+                [enc setTexture:input atIndex:0];
+                [enc setTexture:output atIndex:1];
+                [enc setTexture:_gbufferDepth atIndex:2];
+                [enc setTexture:_gbufferNormal atIndex:3];
+                [enc setTexture:_gbufferAlbedo atIndex:4];
+                [enc setTexture:_svgfVariance atIndex:5];
+                [enc dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
+            }
+            [enc endEncoding];
+
+            finalColorSource = _denoiserPingPong[(iterations - 1) % 2];
+        } else {
+            // No spatial filter yet — show temporally accumulated result
+            finalColorSource = _svgfColorHistory[cur];
+        }
+
+        // Flip history ping-pong
+        _svgfHistoryIndex = 1 - _svgfHistoryIndex;
+    }
 
     // ---- A-trous Denoiser Pass ----
     if (_renderOptions.denoiserMode == DenoiserMode::ATrous) {
@@ -961,6 +1197,14 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
         // Present the drawable to the screen.
         [commandBuffer presentDrawable:view.currentDrawable];
+    }
+
+    // Copy current G-buffer to previous frame storage (for SVGF temporal validation next frame)
+    {
+        id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+        [blit copyFromTexture:_gbufferDepth toTexture:_prevGbufferDepth];
+        [blit copyFromTexture:_gbufferNormal toTexture:_prevGbufferNormal];
+        [blit endEncoding];
     }
 
     // Finally, commit the command buffer so that the GPU can start executing.
