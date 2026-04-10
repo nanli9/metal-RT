@@ -182,6 +182,12 @@ The implementation of the cross-platform view controller.
             [_renderer resetAccumulation];
         }
 
+        float emissive = _renderer.emissiveIntensity;
+        if (ImGui::SliderFloat("Emissive", &emissive, 0.0f, 20.0f, "%.1f")) {
+            _renderer.emissiveIntensity = emissive;
+            [_renderer resetAccumulation];
+        }
+
         const char *debugItems[] = {
             "Off", "Primitive ID", "Material ID", "Barycentrics",
             "Base Color", "Normals", "NdotL", "Shadow", "Instance ID",

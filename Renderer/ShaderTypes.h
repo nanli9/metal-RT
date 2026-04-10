@@ -53,7 +53,8 @@ struct Uniforms {
     unsigned int frameIndex;
     unsigned int lightCount;
     unsigned int enablePBR;  // 0 = flat shading (Phase 4), 1 = full PBR
-    unsigned int debugMode; // 0=normal, 1=primitiveID, 2=materialID, 3=barycentrics, 4=baseColor, 5=normals, 6=NdotL, 7=shadow, 8=instanceID
+    unsigned int debugMode;
+    float emissiveIntensity; // multiplier for emissive light sources // 0=normal, 1=primitiveID, 2=materialID, 3=barycentrics, 4=baseColor, 5=normals, 6=NdotL, 7=shadow, 8=instanceID
     Camera camera;
 };
 

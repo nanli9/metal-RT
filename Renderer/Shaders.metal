@@ -489,6 +489,7 @@ kernel void raytracingKernel(
             float3 surfaceColor = 0.0f;
             float bistroRoughness = 0.5f;
             float bistroMetallic = 0.0f;
+            float3 emissiveColor = 0.0f;
 
             if (mask & GEOMETRY_MASK_TRIANGLE) {
                 float3 objectSpaceSurfaceNormal;
@@ -550,6 +551,13 @@ kernel void raytracingKernel(
                         bistroRoughness = roughness;
                         bistroMetallic = metallic;
 
+                        // Sample emissive texture (only materials with actual emissive textures glow)
+                        if (mat.emissiveTextureIndex != 0xFFFFFFFF) {
+                            emissiveColor = sampleTexture(sceneTexArgBuf, mat.emissiveTextureIndex, uv);
+                            emissiveColor *= float3(mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2]);
+                            emissiveColor *= uniforms.emissiveIntensity;
+                        }
+
                         // Capture PBR debug data
                         if (bounce == 0) {
                             dbgUV = uv;
@@ -561,6 +569,13 @@ kernel void raytracingKernel(
                         // Simple flat shading (Phase 4 style): material base color only
                         surfaceColor = float3(mat.baseColorFactor[0], mat.baseColorFactor[1], mat.baseColorFactor[2]);
                         worldSpaceSurfaceNormal = normalize(transformDirection(objectSpaceSurfaceNormal, objectToWorldSpaceTransform));
+
+                        // Emissive in flat shading mode too
+                        if (mat.emissiveTextureIndex != 0xFFFFFFFF) {
+                            emissiveColor = sampleTexture(sceneTexArgBuf, mat.emissiveTextureIndex, uv);
+                            emissiveColor *= float3(mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2]);
+                            emissiveColor *= uniforms.emissiveIntensity;
+                        }
                     }
 
                 } else if (usePerPrimitiveData) {
@@ -696,6 +711,9 @@ kernel void raytracingKernel(
                     dbgShadow = inShadow ? 0.0f : 1.0f;
                     dbgNdotL = saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
                 }
+
+                // Add emissive self-illumination (not affected by shadow or NdotL)
+                accumulatedColor += emissiveColor * color;
 
                 // Attenuate for next bounce (diffuse-like)
                 color *= surfaceColor;

@@ -103,6 +103,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         _cameraPosition = sceneAsset.cameraPosition;
         _cameraTarget = sceneAsset.cameraTarget;
         _enablePBR = YES;
+        _emissiveIntensity = 5.0f;
 
         [self loadMetal];
         [self createBistroBuffers];
@@ -733,6 +734,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->lightCount = _useBistroPath ? 0 : (unsigned int)_scene.lightCount;
     uniforms->enablePBR = _enablePBR ? 1 : 0;
     uniforms->debugMode = (unsigned int)_debugMode;
+    uniforms->emissiveIntensity = _emissiveIntensity;
 
 #if !TARGET_OS_IPHONE
     [_uniformBuffer didModifyRange:NSMakeRange(_uniformBufferOffset, alignedUniformsSize)];

@@ -100,7 +100,7 @@ _Goal: Correct physically-based appearance._
 - [ ] **6.6** Add G-buffer output textures (depth R32Float, normal RGBA16Float, albedo RGBA8Unorm) and write them in shader (deferred to Phase 8)
 - [x] **6.7** Test: PBR lighting with textures, normal maps, environment map
 - [x] **6.8** (bonus) ImGui overlay with FPS counter
-- [ ] **6.9** Implement emissive light sources from FBX — materials with emissive textures/factors should emit light, making black emissive meshes (street lights, string lights, shop signs) glow in the scene
+- [x] **6.9** Implement emissive light sources from FBX — materials with emissive textures/factors should emit light, making black emissive meshes (street lights, string lights, shop signs) glow in the scene
 
 **STOP — wait for user review before starting Phase 7.**
 
