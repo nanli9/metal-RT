@@ -169,6 +169,81 @@
 
     // Instance descriptors will be filled by AccelerationStructureBuilder
 
+    // ---- Build emissive triangle list for NEE ----
+    std::vector<GPUEmissiveTriangle> emissiveTriangles;
+
+    for (size_t ii = 0; ii < instances.size(); ii++) {
+        auto &inst = instances[ii];
+        auto &mesh = meshes[inst.meshIndex];
+        MaterialAsset *mat = (mesh.materialIndex < materials.count) ? materials[mesh.materialIndex] : nil;
+
+        // Only process meshes with actual emissive textures
+        if (!mat || !mat.emissiveTexture) continue;
+
+        simd_float3 emFactor = mat.emissiveFactor;
+        // Skip if emissive factor is zero
+        if (simd_length_squared(emFactor) < 1e-6f) continue;
+
+        simd_float4x4 xform = inst.worldTransform;
+
+        for (uint32_t ti = 0; ti < mesh.triangleCount(); ti++) {
+            uint32_t i0 = mesh.indices[ti * 3 + 0];
+            uint32_t i1 = mesh.indices[ti * 3 + 1];
+            uint32_t i2 = mesh.indices[ti * 3 + 2];
+
+            // Transform vertices to world space
+            simd_float4 p0w = simd_mul(xform, simd_make_float4(mesh.positions[i0].x, mesh.positions[i0].y, mesh.positions[i0].z, 1.0f));
+            simd_float4 p1w = simd_mul(xform, simd_make_float4(mesh.positions[i1].x, mesh.positions[i1].y, mesh.positions[i1].z, 1.0f));
+            simd_float4 p2w = simd_mul(xform, simd_make_float4(mesh.positions[i2].x, mesh.positions[i2].y, mesh.positions[i2].z, 1.0f));
+
+            simd_float3 v0 = simd_make_float3(p0w.x, p0w.y, p0w.z);
+            simd_float3 v1 = simd_make_float3(p1w.x, p1w.y, p1w.z);
+            simd_float3 v2 = simd_make_float3(p2w.x, p2w.y, p2w.z);
+
+            simd_float3 edge1 = v1 - v0;
+            simd_float3 edge2 = v2 - v0;
+            simd_float3 crossP = simd_cross(edge1, edge2);
+            float area = simd_length(crossP) * 0.5f;
+            if (area < 1e-8f) continue;
+
+            simd_float3 faceNormal = simd_normalize(crossP);
+
+            GPUEmissiveTriangle eTri;
+            eTri.v0[0] = v0.x; eTri.v0[1] = v0.y; eTri.v0[2] = v0.z;
+            eTri.v1[0] = v1.x; eTri.v1[1] = v1.y; eTri.v1[2] = v1.z;
+            eTri.v2[0] = v2.x; eTri.v2[1] = v2.y; eTri.v2[2] = v2.z;
+            eTri.normal[0] = faceNormal.x; eTri.normal[1] = faceNormal.y; eTri.normal[2] = faceNormal.z;
+            eTri.emissiveColor[0] = emFactor.x; eTri.emissiveColor[1] = emFactor.y; eTri.emissiveColor[2] = emFactor.z;
+            eTri.area = area;
+            eTri.cdfValue = 0.0f; // filled below
+            emissiveTriangles.push_back(eTri);
+        }
+    }
+
+    // Build power-weighted CDF
+    float totalWeight = 0.0f;
+    for (auto &eTri : emissiveTriangles) {
+        float luminance = 0.2126f * eTri.emissiveColor[0] + 0.7152f * eTri.emissiveColor[1] + 0.0722f * eTri.emissiveColor[2];
+        totalWeight += luminance * eTri.area;
+    }
+    if (totalWeight > 0.0f) {
+        float cumulative = 0.0f;
+        for (auto &eTri : emissiveTriangles) {
+            float luminance = 0.2126f * eTri.emissiveColor[0] + 0.7152f * eTri.emissiveColor[1] + 0.0722f * eTri.emissiveColor[2];
+            cumulative += luminance * eTri.area;
+            eTri.cdfValue = cumulative / totalWeight;
+        }
+    }
+
+    id<MTLBuffer> emissiveBuf = nil;
+    if (!emissiveTriangles.empty()) {
+        emissiveBuf = [device newBufferWithLength:emissiveTriangles.size() * sizeof(GPUEmissiveTriangle) options:bufferOpts];
+        emissiveBuf.label = @"Emissive Light Triangles";
+        memcpy(emissiveBuf.contents, emissiveTriangles.data(), emissiveTriangles.size() * sizeof(GPUEmissiveTriangle));
+    }
+
+    NSLog(@"SceneUploader: %zu emissive triangles, totalWeight=%.4f", emissiveTriangles.size(), totalWeight);
+
     // ---- Store everything on GPUScene ----
     [gpuScene setVertexPositionBuffer:positionBuf];
     [gpuScene setVertexNormalBuffer:normalBuf];
@@ -183,6 +258,11 @@
     [gpuScene setInstanceBuffer:instanceBuf];
     [gpuScene setInstanceCount:instances.size()];
     [gpuScene setMeshInfos:std::move(meshInfos)];
+    if (emissiveBuf) {
+        [gpuScene setEmissiveLightBuffer:emissiveBuf];
+        [gpuScene setEmissiveLightCount:emissiveTriangles.size()];
+        [gpuScene setEmissiveTotalWeight:totalWeight];
+    }
 
     NSLog(@"SceneUploader: upload complete");
 }

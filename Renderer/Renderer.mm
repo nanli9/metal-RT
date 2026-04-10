@@ -735,6 +735,8 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->enablePBR = _enablePBR ? 1 : 0;
     uniforms->debugMode = (unsigned int)_debugMode;
     uniforms->emissiveIntensity = _emissiveIntensity;
+    uniforms->emissiveLightCount = _useBistroPath ? (unsigned int)_gpuScene.emissiveLightCount : 0;
+    uniforms->emissiveTotalWeight = _useBistroPath ? _gpuScene.emissiveTotalWeight : 0.0f;
 
 #if !TARGET_OS_IPHONE
     [_uniformBuffer didModifyRange:NSMakeRange(_uniformBufferOffset, alignedUniformsSize)];
@@ -789,6 +791,8 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         [computeEncoder setBuffer:_gpuScene.instanceBuffer offset:0 atIndex:2];
         [computeEncoder setBuffer:_gpuScene.materialBuffer offset:0 atIndex:6];
         [computeEncoder setBuffer:_textureArgBuffer offset:0 atIndex:7];
+        if (_gpuScene.emissiveLightBuffer)
+            [computeEncoder setBuffer:_gpuScene.emissiveLightBuffer offset:0 atIndex:8];
 
         [computeEncoder setAccelerationStructure:_gpuScene.instanceAccelerationStructure atBufferIndex:4];
 

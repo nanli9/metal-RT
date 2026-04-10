@@ -54,7 +54,9 @@ struct Uniforms {
     unsigned int lightCount;
     unsigned int enablePBR;  // 0 = flat shading (Phase 4), 1 = full PBR
     unsigned int debugMode;
-    float emissiveIntensity; // multiplier for emissive light sources // 0=normal, 1=primitiveID, 2=materialID, 3=barycentrics, 4=baseColor, 5=normals, 6=NdotL, 7=shadow, 8=instanceID
+    unsigned int emissiveLightCount;
+    float emissiveIntensity;
+    float emissiveTotalWeight; // sum of all emissive triangle weights for PDF
     Camera camera;
 };
 
@@ -79,6 +81,14 @@ struct GPUTriangleData {
     float tangents[3][3];   // 3 vertices * xyz
     float tangentSign[3];
     unsigned int materialIndex;
+};
+
+struct GPUEmissiveTriangle {
+    float v0[3], v1[3], v2[3]; // world-space vertex positions
+    float normal[3];            // face normal
+    float emissiveColor[3];     // pre-multiplied emissive color
+    float area;                 // triangle area in world space
+    float cdfValue;             // cumulative distribution value [0..1]
 };
 
 struct GPUMaterial {

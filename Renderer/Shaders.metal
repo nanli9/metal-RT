@@ -359,7 +359,8 @@ kernel void raytracingKernel(
      instance_acceleration_structure                        accelerationStructure     [[buffer(4)]],
      intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]],
      constant GPUMaterial                                  *materials                 [[buffer(6), function_constant(bistroMode)]],
-     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]]
+     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]],
+     device GPUEmissiveTriangle                            *emissiveLights            [[buffer(8), function_constant(bistroMode)]]
 )
 {
     // The sample aligns the thread count to the threadgroup size, which means the thread count
@@ -712,6 +713,76 @@ kernel void raytracingKernel(
                     dbgNdotL = saturate(dot(worldSpaceSurfaceNormal, worldSpaceLightDirection));
                 }
 
+                // --- NEE: sample one emissive area light ---
+                if (uniforms.emissiveLightCount > 0) {
+                    float lightRand = halton(offset + uniforms.frameIndex, 2 + bounce * 8 + 3);
+
+                    // Binary search CDF for power-weighted triangle selection
+                    uint lo = 0, hi = uniforms.emissiveLightCount - 1;
+                    while (lo < hi) {
+                        uint mid = (lo + hi) / 2;
+                        if (emissiveLights[mid].cdfValue < lightRand) lo = mid + 1;
+                        else hi = mid;
+                    }
+                    uint lightIdx = lo;
+
+                    // Sample random point on the emissive triangle
+                    float2 lightUV = float2(
+                        halton(offset + uniforms.frameIndex, 2 + bounce * 8 + 4),
+                        halton(offset + uniforms.frameIndex, 2 + bounce * 8 + 5));
+                    float su = sqrt(lightUV.x);
+                    float bary0 = 1.0f - su;
+                    float bary1 = lightUV.y * su;
+                    float bary2 = 1.0f - bary0 - bary1;
+
+                    float3 lv0 = float3(emissiveLights[lightIdx].v0[0], emissiveLights[lightIdx].v0[1], emissiveLights[lightIdx].v0[2]);
+                    float3 lv1 = float3(emissiveLights[lightIdx].v1[0], emissiveLights[lightIdx].v1[1], emissiveLights[lightIdx].v1[2]);
+                    float3 lv2 = float3(emissiveLights[lightIdx].v2[0], emissiveLights[lightIdx].v2[1], emissiveLights[lightIdx].v2[2]);
+                    float3 samplePos = bary0 * lv0 + bary1 * lv1 + bary2 * lv2;
+
+                    float3 toLight = samplePos - worldSpaceIntersectionPoint;
+                    float dist2 = dot(toLight, toLight);
+                    float dist = sqrt(dist2);
+                    float3 Lem = toLight / dist;
+
+                    float3 lightN = float3(emissiveLights[lightIdx].normal[0], emissiveLights[lightIdx].normal[1], emissiveLights[lightIdx].normal[2]);
+                    float NdotL_surf = saturate(dot(worldSpaceSurfaceNormal, Lem));
+                    float NdotL_light = saturate(dot(-Lem, lightN));
+
+                    if (NdotL_surf > 0.0f && NdotL_light > 0.0f && dist > 1e-3f) {
+                        struct ray emShadowRay;
+                        emShadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
+                        emShadowRay.direction = Lem;
+                        emShadowRay.max_distance = dist - 2e-3f;
+
+                        i.accept_any_intersection(true);
+                        auto emShadow = i.intersect(emShadowRay, accelerationStructure, RAY_MASK_SHADOW);
+
+                        if (emShadow.type == intersection_type::none) {
+                            float3 emColor = float3(emissiveLights[lightIdx].emissiveColor[0],
+                                                    emissiveLights[lightIdx].emissiveColor[1],
+                                                    emissiveLights[lightIdx].emissiveColor[2]);
+                            emColor *= uniforms.emissiveIntensity;
+                            float lightArea = emissiveLights[lightIdx].area;
+
+                            // PDF = (luminance * area / totalWeight) / area = luminance / totalWeight
+                            float lum = 0.2126f * emColor.r + 0.7152f * emColor.g + 0.0722f * emColor.b;
+                            float pdf = lum / max(uniforms.emissiveTotalWeight * uniforms.emissiveIntensity, 1e-6f);
+
+                            // Contribution: Le * NdotL_surface * NdotL_light * area / (dist² * pdf_select)
+                            // where pdf_select = weight_k / totalWeight, and we sample uniformly on triangle
+                            // Full PDF = pdf_select / area_k
+                            // So contribution = Le * NdotL_s * NdotL_l / (dist² * pdf_select / area_k)
+                            //                 = Le * NdotL_s * NdotL_l * area_k / (dist² * pdf_select)
+                            float pdf_select = lum / max(uniforms.emissiveTotalWeight * uniforms.emissiveIntensity, 1e-6f);
+                            float pdf_full = pdf_select / lightArea;
+
+                            float3 contrib = emColor * NdotL_surf * NdotL_light / (dist2 * pdf_full + 1e-6f);
+                            accumulatedColor += contrib * color / M_PI_F;
+                        }
+                    }
+                }
+
                 // Add emissive self-illumination (not affected by shadow or NdotL)
                 accumulatedColor += emissiveColor * color;
 
@@ -744,8 +815,8 @@ kernel void raytracingKernel(
             // BRDF and samples the rays with a cosine distribution over the hemisphere (importance
             // sampling). This requires that the kernel only multiply the colors together. This
             // sampling strategy also reduces the amount of noise in the output image.
-            r = float2(halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 3),
-                       halton(offset + uniforms.frameIndex, 2 + bounce * 5 + 4));
+            r = float2(halton(offset + uniforms.frameIndex, 2 + bounce * 8 + 6),
+                       halton(offset + uniforms.frameIndex, 2 + bounce * 8 + 7));
 
             float3 worldSpaceSampleDirection = sampleCosineWeightedHemisphere(r);
             worldSpaceSampleDirection = alignHemisphereWithNormal(worldSpaceSampleDirection, worldSpaceSurfaceNormal);

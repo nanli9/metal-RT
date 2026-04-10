@@ -44,6 +44,11 @@ struct MeshGPUInfo {
 // Buffer of MTLResourceID values for bindless texture access (Metal 3)
 @property (nonatomic, readonly) id<MTLBuffer> textureResourceIDBuffer;
 
+// Emissive area lights
+@property (nonatomic, readonly) id<MTLBuffer> emissiveLightBuffer;
+@property (nonatomic, readonly) NSUInteger emissiveLightCount;
+@property (nonatomic, readonly) float emissiveTotalWeight;
+
 // Instance data
 @property (nonatomic, readonly) id<MTLBuffer> instanceBuffer;
 @property (nonatomic, readonly) NSUInteger instanceCount;

@@ -23,6 +23,9 @@
 - (void)setMaterialCount:(NSUInteger)count { _materialCount = count; }
 - (void)setTextures:(NSArray<id<MTLTexture>> *)textures { _textures = textures; }
 - (void)setTextureResourceIDBuffer:(id<MTLBuffer>)buf { _textureResourceIDBuffer = buf; }
+- (void)setEmissiveLightBuffer:(id<MTLBuffer>)buf { _emissiveLightBuffer = buf; }
+- (void)setEmissiveLightCount:(NSUInteger)count { _emissiveLightCount = count; }
+- (void)setEmissiveTotalWeight:(float)w { _emissiveTotalWeight = w; }
 - (void)setInstanceBuffer:(id<MTLBuffer>)buf { _instanceBuffer = buf; }
 - (void)setInstanceCount:(NSUInteger)count { _instanceCount = count; }
 - (void)setPrimitiveAccelerationStructures:(NSArray<id<MTLAccelerationStructure>> *)arr { _primitiveAccelerationStructures = arr; }
