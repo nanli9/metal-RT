@@ -58,6 +58,8 @@ struct Uniforms {
     unsigned int emissiveLightCount;
     float emissiveIntensity;
     float emissiveTotalWeight; // sum of all emissive triangle weights for PDF
+    unsigned int enableShadows;
+    unsigned int enableReflections;
     Camera camera;
 };
 
@@ -102,6 +104,19 @@ struct GPUMaterial {
     unsigned int normalTextureIndex;
     unsigned int specularTextureIndex;   // ORM packed
     unsigned int emissiveTextureIndex;
+};
+
+// ---- Denoiser types ----
+
+struct DenoiserParams {
+    unsigned int stepSize;      // 1, 2, 4, 8, 16 for each A-trous iteration
+    float sigmaColor;           // luminance edge-stopping weight
+    float sigmaNormal;          // normal edge-stopping weight
+    float sigmaDepth;           // depth edge-stopping weight
+    unsigned int width;
+    unsigned int height;
+    float temporalBlend;        // 0..1: how much to blend toward unfiltered (0=full denoise, 1=no denoise)
+    unsigned int isLastIteration; // 1 if this is the final A-trous pass
 };
 
 #endif

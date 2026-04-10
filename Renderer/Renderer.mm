@@ -38,6 +38,15 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     id <MTLTexture> _accumulationTargets[2];
     id <MTLTexture> _randomTexture;
 
+    // G-buffer textures for denoiser
+    id <MTLTexture> _gbufferDepth;    // R32Float
+    id <MTLTexture> _gbufferNormal;   // RGBA16Float (world-space normal)
+    id <MTLTexture> _gbufferAlbedo;   // RGBA8Unorm
+
+    // A-trous denoiser
+    id <MTLComputePipelineState> _atrousDenoiserPipeline;
+    id <MTLTexture> _denoiserPingPong[2]; // RGBA32Float ping-pong for iterative filtering
+
     id <MTLBuffer> _resourceBuffer;
     id <MTLBuffer> _instanceBuffer;
 
@@ -102,9 +111,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
         _cameraPosition = sceneAsset.cameraPosition;
         _cameraTarget = sceneAsset.cameraTarget;
-        _enablePBR = YES;
-        _maxBounces = 3;
-        _emissiveIntensity = 5.0f;
+        // RenderOptions struct defaults are set via member initializers
 
         [self loadMetal];
         [self createBistroBuffers];
@@ -290,6 +297,12 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     _copyPipeline = [_device newRenderPipelineStateWithDescriptor:renderDescriptor error:&error];
 
     NSAssert(_copyPipeline, @"Failed to create the copy pipeline state %@: %@", raytracingFunction.name, error);
+
+    // A-trous denoiser pipeline
+    id<MTLFunction> atrousFunction = [_library newFunctionWithName:@"atrousDenoiser"];
+    NSAssert(atrousFunction, @"Failed to find atrousDenoiser function");
+    _atrousDenoiserPipeline = [_device newComputePipelineStateWithFunction:atrousFunction error:&error];
+    NSAssert(_atrousDenoiserPipeline, @"Failed to create A-trous denoiser pipeline: %@", error);
 }
 
 // Create an argument encoder that encodes references to a set of resources into a buffer.
@@ -641,6 +654,12 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     _copyPipeline = [_device newRenderPipelineStateWithDescriptor:renderDescriptor error:&error];
     NSAssert(_copyPipeline, @"Failed to create copy pipeline: %@", error);
+
+    // A-trous denoiser pipeline
+    id<MTLFunction> atrousFunction = [_library newFunctionWithName:@"atrousDenoiser"];
+    NSAssert(atrousFunction, @"Failed to find atrousDenoiser function");
+    _atrousDenoiserPipeline = [_device newComputePipelineStateWithFunction:atrousFunction error:&error];
+    NSAssert(_atrousDenoiserPipeline, @"Failed to create A-trous denoiser pipeline: %@", error);
 }
 
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size
@@ -662,6 +681,21 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     for (NSUInteger i = 0; i < 2; i++)
         _accumulationTargets[i] = [_device newTextureWithDescriptor:textureDescriptor];
+
+    // G-buffer textures for denoiser (all GPU-private, read+write)
+    textureDescriptor.pixelFormat = MTLPixelFormatR32Float;
+    _gbufferDepth = [_device newTextureWithDescriptor:textureDescriptor];
+
+    textureDescriptor.pixelFormat = MTLPixelFormatRGBA16Float;
+    _gbufferNormal = [_device newTextureWithDescriptor:textureDescriptor];
+
+    textureDescriptor.pixelFormat = MTLPixelFormatRGBA8Unorm;
+    _gbufferAlbedo = [_device newTextureWithDescriptor:textureDescriptor];
+
+    // Denoiser ping-pong textures (same format as accumulation targets)
+    textureDescriptor.pixelFormat = MTLPixelFormatRGBA32Float;
+    for (NSUInteger i = 0; i < 2; i++)
+        _denoiserPingPong[i] = [_device newTextureWithDescriptor:textureDescriptor];
 
     // Create a texture that contains a random integer value for each pixel. The sample
     // uses these values to decorrelate pixels while drawing pseudorandom numbers from the
@@ -730,15 +764,19 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->width = (unsigned int)_size.width;
     uniforms->height = (unsigned int)_size.height;
 
+    if (!_renderOptions.enableAccumulation)
+        _frameIndex = 0;
     uniforms->frameIndex = _frameIndex++;
 
     uniforms->lightCount = _useBistroPath ? 0 : (unsigned int)_scene.lightCount;
-    uniforms->enablePBR = _enablePBR ? 1 : 0;
-    uniforms->debugMode = (unsigned int)_debugMode;
-    uniforms->maxBounces = (unsigned int)_maxBounces;
-    uniforms->emissiveIntensity = _emissiveIntensity;
+    uniforms->enablePBR = _renderOptions.enablePBR ? 1 : 0;
+    uniforms->debugMode = (unsigned int)_renderOptions.debugMode;
+    uniforms->maxBounces = (unsigned int)_renderOptions.maxBounces;
+    uniforms->emissiveIntensity = _renderOptions.emissiveIntensity;
     uniforms->emissiveLightCount = _useBistroPath ? (unsigned int)_gpuScene.emissiveLightCount : 0;
     uniforms->emissiveTotalWeight = _useBistroPath ? _gpuScene.emissiveTotalWeight : 0.0f;
+    uniforms->enableShadows = _renderOptions.enableShadows ? 1 : 0;
+    uniforms->enableReflections = _renderOptions.enableReflections ? 1 : 0;
 
 #if !TARGET_OS_IPHONE
     [_uniformBuffer didModifyRange:NSMakeRange(_uniformBufferOffset, alignedUniformsSize)];
@@ -801,6 +839,9 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         [computeEncoder setTexture:_randomTexture atIndex:0];
         [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
         [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
+        [computeEncoder setTexture:_gbufferDepth atIndex:3];
+        [computeEncoder setTexture:_gbufferNormal atIndex:4];
+        [computeEncoder setTexture:_gbufferAlbedo atIndex:5];
         // Make all scene textures resident for bindless argument buffer access
         for (id<MTLTexture> tex in _gpuScene.textures)
             [computeEncoder useResource:tex usage:MTLResourceUsageRead];
@@ -823,6 +864,9 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         [computeEncoder setTexture:_randomTexture atIndex:0];
         [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
         [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
+        [computeEncoder setTexture:_gbufferDepth atIndex:3];
+        [computeEncoder setTexture:_gbufferNormal atIndex:4];
+        [computeEncoder setTexture:_gbufferAlbedo atIndex:5];
 
         for (Geometry *geometry in _scene.geometries)
             for (id <MTLResource> resource in geometry.resources)
@@ -843,6 +887,51 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     // Swap the source and destination accumulation targets for the next frame.
     std::swap(_accumulationTargets[0], _accumulationTargets[1]);
 
+    // The texture that the tone-map pass will read from (may be overridden by denoiser)
+    id<MTLTexture> finalColorSource = _accumulationTargets[0];
+
+    // ---- A-trous Denoiser Pass ----
+    if (_renderOptions.denoiserMode == DenoiserMode::ATrous) {
+        id<MTLComputeCommandEncoder> denoiseEncoder = [commandBuffer computeCommandEncoder];
+        [denoiseEncoder setComputePipelineState:_atrousDenoiserPipeline];
+
+        int iterations = _renderOptions.atrousIterations;
+
+        // Compute temporal blend factor: fade denoiser out as samples accumulate
+        // At frame 0: blend=0 (full denoise), fades toward 1 as frameIndex grows
+        float temporalBlend = 1.0f - 1.0f / (1.0f + (float)_frameIndex * 0.15f);
+
+        for (int iter = 0; iter < iterations; iter++) {
+            // First iteration reads from accumulated result, subsequent iterations ping-pong
+            id<MTLTexture> input = (iter == 0) ? _accumulationTargets[0] : _denoiserPingPong[(iter - 1) % 2];
+            id<MTLTexture> output = _denoiserPingPong[iter % 2];
+
+            DenoiserParams params;
+            params.stepSize = 1 << iter; // 1, 2, 4, 8, 16
+            params.sigmaColor = _renderOptions.denoiseSigmaColor;
+            params.sigmaNormal = _renderOptions.denoiseSigmaNormal;
+            params.sigmaDepth = _renderOptions.denoiseSigmaDepth;
+            params.width = (unsigned int)width;
+            params.height = (unsigned int)height;
+            params.temporalBlend = temporalBlend;
+            params.isLastIteration = (iter == iterations - 1) ? 1 : 0;
+
+            [denoiseEncoder setBytes:&params length:sizeof(params) atIndex:0];
+            [denoiseEncoder setTexture:input atIndex:0];
+            [denoiseEncoder setTexture:output atIndex:1];
+            [denoiseEncoder setTexture:_gbufferDepth atIndex:2];
+            [denoiseEncoder setTexture:_gbufferNormal atIndex:3];
+            [denoiseEncoder setTexture:_gbufferAlbedo atIndex:4];
+
+            [denoiseEncoder dispatchThreadgroups:threadgroups threadsPerThreadgroup:threadsPerThreadgroup];
+        }
+
+        [denoiseEncoder endEncoding];
+
+        // The final denoised result is in the last-written ping-pong texture
+        finalColorSource = _denoiserPingPong[(iterations - 1) % 2];
+    }
+
     if (view.currentDrawable) {
         // Copy the resulting image into the view using the graphics pipeline because the sample
         // can't write directly to it using the compute kernel. The sample delays getting the
@@ -860,7 +949,10 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
         [renderEncoder setRenderPipelineState:_copyPipeline];
 
-        [renderEncoder setFragmentTexture:_accumulationTargets[0] atIndex:0];
+        [renderEncoder setFragmentTexture:finalColorSource atIndex:0];
+
+        float exposure = _renderOptions.exposureAdjust;
+        [renderEncoder setFragmentBytes:&exposure length:sizeof(float) atIndex:0];
 
         // Draw a quad which fills the screen.
         [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];

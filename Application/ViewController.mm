@@ -172,39 +172,46 @@ The implementation of the cross-platform view controller.
         [_imguiRenderer newFrame:view];
 
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(240, 80), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(260, 80), ImGuiCond_FirstUseEver);
         ImGui::Begin("Render Settings");
         ImGui::Text("FPS: %.1f (%.2f ms)", _fps, _fps > 0 ? 1000.0f / _fps : 0.0f);
 
-        bool pbr = _renderer.enablePBR;
-        if (ImGui::Checkbox("PBR Shading", &pbr)) {
-            _renderer.enablePBR = pbr;
-            [_renderer resetAccumulation];
-        }
+        RenderOptions opts = _renderer.renderOptions;
+        bool rtChanged = false;
 
-        const char *bounceItems[] = { "1", "2", "3", "4", "5" };
-        int bounceIdx = _renderer.maxBounces - 1;
-        if (ImGui::Combo("Bounces", &bounceIdx, bounceItems, 5)) {
-            _renderer.maxBounces = bounceIdx + 1;
-            [_renderer resetAccumulation];
-        }
+        if (ImGui::Checkbox("PBR Shading", &opts.enablePBR)) rtChanged = true;
+        if (ImGui::Checkbox("Shadows", &opts.enableShadows)) rtChanged = true;
+        if (ImGui::Checkbox("Reflections", &opts.enableReflections)) rtChanged = true;
+        ImGui::Checkbox("Accumulation", &opts.enableAccumulation);
 
-        float emissive = _renderer.emissiveIntensity;
-        if (ImGui::SliderFloat("Emissive", &emissive, 0.0f, 20.0f, "%.1f")) {
-            _renderer.emissiveIntensity = emissive;
-            [_renderer resetAccumulation];
-        }
+        if (ImGui::SliderInt("Bounces", &opts.maxBounces, 1, 5)) rtChanged = true;
+        if (ImGui::SliderFloat("Emissive", &opts.emissiveIntensity, 0.0f, 20.0f, "%.1f")) rtChanged = true;
+        ImGui::SliderFloat("Exposure", &opts.exposureAdjust, -4.0f, 4.0f, "%.1f EV");
 
         const char *debugItems[] = {
             "Off", "Primitive ID", "Material ID", "Barycentrics",
             "Base Color", "Normals", "NdotL", "Shadow", "Instance ID",
-            "Lambert", "UV coords", "BaseTex@UV", "AO value", "BaseTexIdx"
+            "Lambert", "UV coords", "BaseTex@UV", "AO value", "BaseTexIdx",
+            "GBuf Depth", "GBuf Normal", "GBuf Albedo", "Denoise Weight"
         };
-        int debugMode = _renderer.debugMode;
-        if (ImGui::Combo("Debug View", &debugMode, debugItems, 14)) {
-            _renderer.debugMode = debugMode;
-            [_renderer resetAccumulation];
+        if (ImGui::Combo("Debug View", &opts.debugMode, debugItems, 18)) rtChanged = true;
+
+        const char *denoiserItems[] = { "Off", "A-Trous", "SVGF (coming soon)" };
+        int denoiserIdx = static_cast<int>(opts.denoiserMode);
+        if (ImGui::Combo("Denoiser", &denoiserIdx, denoiserItems, 3)) {
+            opts.denoiserMode = static_cast<DenoiserMode>(denoiserIdx);
+            rtChanged = true;
         }
+        if (opts.denoiserMode != DenoiserMode::Off) {
+            ImGui::SliderInt("Denoise Iterations", &opts.atrousIterations, 1, 5);
+            ImGui::SliderFloat("Sigma Color", &opts.denoiseSigmaColor, 0.1f, 10.0f, "%.2f");
+            ImGui::SliderFloat("Sigma Normal", &opts.denoiseSigmaNormal, 1.0f, 256.0f, "%.0f");
+            ImGui::SliderFloat("Sigma Depth", &opts.denoiseSigmaDepth, 0.1f, 10.0f, "%.2f");
+        }
+
+        _renderer.renderOptions = opts;
+        if (rtChanged)
+            [_renderer resetAccumulation];
 
         if (_cameraController) {
             ImGui::Separator();

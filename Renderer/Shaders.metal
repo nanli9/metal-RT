@@ -360,7 +360,10 @@ kernel void raytracingKernel(
      intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]],
      constant GPUMaterial                                  *materials                 [[buffer(6), function_constant(bistroMode)]],
      device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]],
-     device GPUEmissiveTriangle                            *emissiveLights            [[buffer(8), function_constant(bistroMode)]]
+     device GPUEmissiveTriangle                            *emissiveLights            [[buffer(8), function_constant(bistroMode)]],
+     texture2d<float, access::read_write>                    gbufferDepthTex           [[texture(3)]],
+     texture2d<float, access::read_write>                   gbufferNormalTex          [[texture(4)]],
+     texture2d<float, access::read_write>                   gbufferAlbedoTex          [[texture(5)]]
 )
 {
     // The sample aligns the thread count to the threadgroup size, which means the thread count
@@ -450,6 +453,11 @@ kernel void raytracingKernel(
 
             // Stop if the ray didn't hit anything and has bounced out of the scene.
             if (intersection.type == intersection_type::none) {
+                if (bounce == 0) {
+                    gbufferDepthTex.write(float4(INFINITY, 0, 0, 0), tid);
+                    gbufferNormalTex.write(float4(0, 0, 0, 0), tid);
+                    gbufferAlbedoTex.write(float4(0, 0, 0, 0), tid);
+                }
                 if (bistroMode) {
                     // Simple procedural sky gradient
                     float3 dir = normalize(ray.direction);
@@ -646,6 +654,13 @@ kernel void raytracingKernel(
                 }
             }
 
+            // Write G-buffer data at primary hit for denoiser
+            if (bounce == 0) {
+                gbufferDepthTex.write(float4(intersection.distance, 0, 0, 0), tid);
+                gbufferNormalTex.write(float4(worldSpaceSurfaceNormal * 0.5f + 0.5f, 1.0f), tid);
+                gbufferAlbedoTex.write(float4(surfaceColor, 1.0f), tid);
+            }
+
             float3 worldSpaceLightDirection;
             float3 lightColor;
             float lightDistance;
@@ -694,20 +709,24 @@ kernel void raytracingKernel(
 
             if (bistroMode) {
                 // PBR path: cast shadow ray for sun visibility
-                struct ray shadowRay;
-                shadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
-                shadowRay.direction = worldSpaceLightDirection;
-                shadowRay.max_distance = INFINITY;
+                bool inShadow = false;
+                if (uniforms.enableShadows) {
+                    struct ray shadowRay;
+                    shadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
+                    shadowRay.direction = worldSpaceLightDirection;
+                    shadowRay.max_distance = INFINITY;
 
-                i.accept_any_intersection(true);
-                intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW);
+                    i.accept_any_intersection(true);
+                    intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW);
+                    inShadow = (intersection.type != intersection_type::none);
+                }
 
-                float3 ambient = surfaceColor * float3(0.25f, 0.30f, 0.45f) * (1.0f - bistroMetallic * 0.5f);
-                bool inShadow = (intersection.type != intersection_type::none);
-                if (!inShadow)
+                if (!inShadow) {
                     accumulatedColor += lightColor * color;
-                else
+                } else {
+                    float3 ambient = surfaceColor * float3(0.25f, 0.30f, 0.45f) * (1.0f - bistroMetallic * 0.5f);
                     accumulatedColor += ambient * color; // shadow: ambient only
+                }
 
                 if (bounce == 0) {
                     dbgSunShadow = inShadow ? 0.0f : 1.0f;
@@ -751,18 +770,22 @@ kernel void raytracingKernel(
                     float NdotL_light = saturate(dot(-Lem, lightN));
 
                     if (NdotL_surf > 0.0f && NdotL_light > 0.0f && dist > 1e-3f) {
-                        struct ray emShadowRay;
-                        emShadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
-                        emShadowRay.direction = Lem;
-                        emShadowRay.max_distance = dist - 2e-3f;
+                        bool emOccluded = false;
+                        if (uniforms.enableShadows) {
+                            struct ray emShadowRay;
+                            emShadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
+                            emShadowRay.direction = Lem;
+                            emShadowRay.max_distance = dist - 2e-3f;
 
-                        i.accept_any_intersection(true);
-                        auto emShadow = i.intersect(emShadowRay, accelerationStructure, RAY_MASK_SHADOW);
+                            i.accept_any_intersection(true);
+                            auto emShadow = i.intersect(emShadowRay, accelerationStructure, RAY_MASK_SHADOW);
+                            emOccluded = (emShadow.type != intersection_type::none);
+                        }
 
                         if (bounce == 0)
-                            dbgEmissiveShadow = (emShadow.type == intersection_type::none) ? 1.0f : 0.0f;
+                            dbgEmissiveShadow = emOccluded ? 0.0f : 1.0f;
 
-                        if (emShadow.type == intersection_type::none) {
+                        if (!emOccluded) {
                             float3 emColor = float3(emissiveLights[lightIdx].emissiveColor[0],
                                                     emissiveLights[lightIdx].emissiveColor[1],
                                                     emissiveLights[lightIdx].emissiveColor[2]);
@@ -796,21 +819,29 @@ kernel void raytracingKernel(
                 // Original Cornell box Lambertian path
                 color *= surfaceColor;
 
-                struct ray shadowRay;
-                shadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
-                shadowRay.direction = worldSpaceLightDirection;
-                shadowRay.max_distance = lightDistance - 1e-3f;
+                if (uniforms.enableShadows) {
+                    struct ray shadowRay;
+                    shadowRay.origin = worldSpaceIntersectionPoint + worldSpaceSurfaceNormal * 1e-3f;
+                    shadowRay.direction = worldSpaceLightDirection;
+                    shadowRay.max_distance = lightDistance - 1e-3f;
 
-                i.accept_any_intersection(true);
+                    i.accept_any_intersection(true);
 
-                if (useIntersectionFunctions)
-                    intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW, intersectionFunctionTable);
-                else
-                    intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW);
+                    if (useIntersectionFunctions)
+                        intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW, intersectionFunctionTable);
+                    else
+                        intersection = i.intersect(shadowRay, accelerationStructure, RAY_MASK_SHADOW);
 
-                if (intersection.type == intersection_type::none)
+                    if (intersection.type == intersection_type::none)
+                        accumulatedColor += lightColor * color;
+                } else {
                     accumulatedColor += lightColor * color;
+                }
             }
+
+            // Skip further bounces if reflections/GI are disabled
+            if (!uniforms.enableReflections && bounce == 0)
+                break;
 
             // Choose a random direction to continue the path of the ray. This causes light to
             // bounce between surfaces. An app might evaluate a more complicated equation to
@@ -850,6 +881,33 @@ kernel void raytracingKernel(
                 case 11: accumulatedColor = dbgBaseTexSample; break;                                               // Raw base color tex sample at actual UV
                 case 12: accumulatedColor = float3(dbgAO); break;                                                  // AO value
                 case 13: accumulatedColor = fract(float(dbgBaseTexIdx) * float3(0.17f, 0.53f, 0.91f)); break;      // Base tex index
+                case 14: accumulatedColor = float3(saturate(gbufferDepthTex.read(tid).x / 100.0f)); break;              // G-buffer depth
+                case 15: accumulatedColor = gbufferNormalTex.read(tid).xyz; break;                                    // G-buffer normal (already 0-1)
+                case 16: accumulatedColor = gbufferAlbedoTex.read(tid).xyz; break;                                    // G-buffer albedo
+                case 17: {
+                    // Denoise weight: show edge-stopping strength at each pixel
+                    // Computes how much filtering the denoiser would apply (bright=smooth, dark=edge)
+                    float3 cN = gbufferNormalTex.read(tid).xyz * 2.0f - 1.0f;
+                    float cD = gbufferDepthTex.read(tid).x;
+                    float wTotal = 0.0f;
+                    float kTotal = 0.0f;
+                    if (cD < 1e10f) {
+                        for (int dy = -2; dy <= 2; dy++) {
+                            for (int dx = -2; dx <= 2; dx++) {
+                                int2 sp = clamp(int2(tid) + int2(dx, dy), int2(0), int2(uniforms.width-1, uniforms.height-1));
+                                float3 sN = gbufferNormalTex.read(uint2(sp)).xyz * 2.0f - 1.0f;
+                                float sD = gbufferDepthTex.read(uint2(sp)).x;
+                                float kw = 1.0f; // simplified kernel weight
+                                float wN = pow(max(dot(cN, sN), 0.0f), 128.0f);
+                                float wD = exp(-abs(cD - sD) / (cD * 1.0f + 1e-6f));
+                                wTotal += kw * wN * wD;
+                                kTotal += kw;
+                            }
+                        }
+                        accumulatedColor = float3(wTotal / kTotal);
+                    }
+                    break;
+                }
                 default: break;
             }
         }
@@ -896,15 +954,98 @@ vertex CopyVertexOut copyVertex(unsigned short vid [[vertex_id]]) {
 
 // Simple fragment shader that copies a texture and applies a simple tonemapping function.
 fragment float4 copyFragment(CopyVertexOut in [[stage_in]],
-                             texture2d<float> tex)
+                             texture2d<float> tex,
+                             constant float &exposureAdjust [[buffer(0)]])
 {
     constexpr sampler sam(min_filter::nearest, mag_filter::nearest, mip_filter::none);
 
     float3 color = tex.sample(sam, in.uv).xyz;
+
+    // Apply exposure adjustment (in EV stops)
+    color *= exp2(exposureAdjust);
 
     // Apply a simple tonemapping function to reduce the dynamic range of the
     // input image into a range which the screen can display.
     color = color / (1.0f + color);
 
     return float4(color, 1.0f);
+}
+
+// ---- A-trous Wavelet Denoiser ----
+// Edge-aware spatial filter using 5x5 B3 spline wavelet kernel with increasing step sizes.
+// Edge-stopping functions based on depth, normal, and luminance differences preserve edges.
+
+// B3 spline 5x5 kernel weights (separable: h = [1/16, 1/4, 3/8, 1/4, 1/16])
+constant float atrousKernel[5] = { 1.0f/16.0f, 1.0f/4.0f, 3.0f/8.0f, 1.0f/4.0f, 1.0f/16.0f };
+
+kernel void atrousDenoiser(
+    uint2                           tid            [[thread_position_in_grid]],
+    constant DenoiserParams        &params         [[buffer(0)]],
+    texture2d<float>                inputColor     [[texture(0)]],
+    texture2d<float, access::write> outputColor    [[texture(1)]],
+    texture2d<float>                depthTex       [[texture(2)]],
+    texture2d<float>                normalTex      [[texture(3)]],
+    texture2d<float>                albedoTex      [[texture(4)]]
+)
+{
+    if (tid.x >= params.width || tid.y >= params.height) return;
+
+    float3 centerColor = inputColor.read(tid).xyz;
+    float  centerDepth = depthTex.read(tid).x;
+    float3 centerNormal = normalTex.read(tid).xyz * 2.0f - 1.0f; // decode from [0,1] to [-1,1]
+    float  centerLum = dot(centerColor, float3(0.2126f, 0.7152f, 0.0722f));
+
+    // Skip sky pixels (infinite depth)
+    if (centerDepth >= 1e10f) {
+        outputColor.write(float4(centerColor, 1.0f), tid);
+        return;
+    }
+
+    float3 colorSum = float3(0.0f);
+    float weightSum = 0.0f;
+    int step = int(params.stepSize);
+
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            int2 samplePos = int2(tid) + int2(dx, dy) * step;
+
+            // Clamp to image bounds
+            samplePos = clamp(samplePos, int2(0), int2(params.width - 1, params.height - 1));
+            uint2 sp = uint2(samplePos);
+
+            float3 sampleColor = inputColor.read(sp).xyz;
+            float  sampleDepth = depthTex.read(sp).x;
+            float3 sampleNormal = normalTex.read(sp).xyz * 2.0f - 1.0f;
+            float  sampleLum = dot(sampleColor, float3(0.2126f, 0.7152f, 0.0722f));
+
+            // Wavelet kernel weight
+            float kernelWeight = atrousKernel[dy + 2] * atrousKernel[dx + 2];
+
+            // Edge-stopping: luminance
+            float lumDiff = abs(centerLum - sampleLum);
+            float wColor = exp(-lumDiff / (params.sigmaColor + 1e-6f));
+
+            // Edge-stopping: normal
+            float normalDot = max(dot(centerNormal, sampleNormal), 0.0f);
+            float wNormal = pow(normalDot, params.sigmaNormal);
+
+            // Edge-stopping: depth
+            float depthDiff = abs(centerDepth - sampleDepth) / (centerDepth + 1e-6f);
+            float wDepth = exp(-depthDiff / (params.sigmaDepth + 1e-6f));
+
+            float w = kernelWeight * wColor * wNormal * wDepth;
+            colorSum += sampleColor * w;
+            weightSum += w;
+        }
+    }
+
+    float3 result = colorSum / max(weightSum, 1e-6f);
+
+    // On the last iteration, blend toward the unfiltered input to fade out the denoiser
+    // as accumulation converges (reduces temporal jitter from per-frame G-buffer changes)
+    if (params.isLastIteration) {
+        result = mix(result, centerColor, params.temporalBlend);
+    }
+
+    outputColor.write(float4(result, 1.0f), tid);
 }
