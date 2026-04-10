@@ -793,11 +793,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         [computeEncoder setTexture:_randomTexture atIndex:0];
         [computeEncoder setTexture:_accumulationTargets[0] atIndex:1];
         [computeEncoder setTexture:_accumulationTargets[1] atIndex:2];
-        // DEBUG: bind first texture directly to slot 3 to test if DDS data is valid
-        if (_gpuScene.textures.count > 0)
-            [computeEncoder setTexture:_gpuScene.textures[0] atIndex:3];
-
-        // Argument buffer approach — keep textures resident
+        // Make all scene textures resident for bindless argument buffer access
         for (id<MTLTexture> tex in _gpuScene.textures)
             [computeEncoder useResource:tex usage:MTLResourceUsageRead];
 

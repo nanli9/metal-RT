@@ -359,8 +359,7 @@ kernel void raytracingKernel(
      instance_acceleration_structure                        accelerationStructure     [[buffer(4)]],
      intersection_function_table<triangle_data, instancing> intersectionFunctionTable [[buffer(5)]],
      constant GPUMaterial                                  *materials                 [[buffer(6), function_constant(bistroMode)]],
-     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]],
-     texture2d<float>                                       debugDirectTex            [[texture(3), function_constant(bistroMode)]]
+     device SceneTextureArgBuffer                          &sceneTexArgBuf            [[buffer(7), function_constant(bistroMode)]]
 )
 {
     // The sample aligns the thread count to the threadgroup size, which means the thread count
@@ -416,8 +415,6 @@ kernel void raytracingKernel(
         float dbgNdotL = 0.0f;
         float dbgShadow = 1.0f;
         bool dbgHit = false;
-        float3 dbgBaseColorFactor = 0.0f;
-        float3 dbgTexIndices = 0.0f; // R=hasBase, G=hasNormal, B=hasSpecular
         float2 dbgUV = 0.0f;
         float3 dbgBaseTexSample = 0.0f; // raw texture sample at UV
         float dbgAO = 1.0f;
@@ -629,12 +626,6 @@ kernel void raytracingKernel(
                 if (mask & GEOMETRY_MASK_TRIANGLE) {
                     const device GPUTriangleData &dbgTri = *(const device GPUTriangleData*)intersection.primitive_data;
                     dbgMaterialId = dbgTri.materialIndex;
-                    constant GPUMaterial &dbgMat = materials[dbgTri.materialIndex];
-                    dbgBaseColorFactor = float3(dbgMat.baseColorFactor[0], dbgMat.baseColorFactor[1], dbgMat.baseColorFactor[2]);
-                    dbgTexIndices = float3(
-                        dbgMat.baseColorTextureIndex != 0xFFFFFFFF ? 1.0f : 0.0f,
-                        dbgMat.normalTextureIndex != 0xFFFFFFFF ? 1.0f : 0.0f,
-                        dbgMat.specularTextureIndex != 0xFFFFFFFF ? 1.0f : 0.0f);
                 }
             }
 
@@ -756,29 +747,16 @@ kernel void raytracingKernel(
                 case 6: accumulatedColor = float3(dbgNdotL); break;                                                // NdotL (no shadow)
                 case 7: accumulatedColor = float3(dbgShadow); break;                                              // Shadow visibility
                 case 8: accumulatedColor = fract(float(dbgInstanceId) * float3(0.17f, 0.63f, 0.41f)); break;      // Instance ID
-                case 9: accumulatedColor = float3(1.0f, 0.0f, 0.0f); break;                                       // Hardcoded red (path test)
-                case 10: accumulatedColor = dbgBaseColorFactor; break;                                             // baseColorFactor only
-                case 11: { // Lambert: baseColorFactor * NdotL, no shadow, no PBR
+                case 9: { // Lambert (no tex): surfaceColor * NdotL
                     float3 L = normalize(float3(-0.1803f, 0.8910f, 0.4167f));
                     float ndl = saturate(dot(dbgWorldNormal, L));
-                    accumulatedColor = dbgBaseColorFactor * ndl + dbgBaseColorFactor * 0.15f;
+                    accumulatedColor = dbgSurfaceColor * ndl + dbgSurfaceColor * 0.15f;
                     break;
                 }
-                case 12: accumulatedColor = dbgTexIndices; break;                                                  // Texture presence (R=base,G=norm,B=spec)
-                case 13: { // Direct texture sample — bypasses argument buffer, samples texture slot 3
-                    float2 uv0 = float2(dbgBarycentrics.x, dbgBarycentrics.y); // use barycentrics as UV for test
-                    accumulatedColor = debugDirectTex.sample(texSampler, uv0).rgb;
-                    break;
-                }
-                case 14: { // Argument buffer texture[0] sample — tests if argbuf works
-                    float2 uv0 = float2(dbgBarycentrics.x, dbgBarycentrics.y);
-                    accumulatedColor = sceneTexArgBuf.textures[0].sample(texSampler, uv0).rgb;
-                    break;
-                }
-                case 15: accumulatedColor = float3(dbgUV, 0.0f); break;                                           // UV coordinates
-                case 16: accumulatedColor = dbgBaseTexSample; break;                                               // Raw base color tex sample at actual UV
-                case 17: accumulatedColor = float3(dbgAO); break;                                                  // AO value
-                case 18: accumulatedColor = fract(float(dbgBaseTexIdx) * float3(0.17f, 0.53f, 0.91f)); break;      // Base tex index
+                case 10: accumulatedColor = float3(dbgUV, 0.0f); break;                                           // UV coordinates
+                case 11: accumulatedColor = dbgBaseTexSample; break;                                               // Raw base color tex sample at actual UV
+                case 12: accumulatedColor = float3(dbgAO); break;                                                  // AO value
+                case 13: accumulatedColor = fract(float(dbgBaseTexIdx) * float3(0.17f, 0.53f, 0.91f)); break;      // Base tex index
                 default: break;
             }
         }
