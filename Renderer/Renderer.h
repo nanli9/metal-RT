@@ -27,6 +27,7 @@ struct RenderOptions;
 @property (nonatomic) simd_float3 cameraTarget;
 @property (nonatomic) BOOL enablePBR;
 @property (nonatomic) int debugMode;
+@property (nonatomic) int maxBounces;
 @property (nonatomic) float emissiveIntensity;
 
 /// Reset frame accumulation (call when camera moves)

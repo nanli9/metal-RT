@@ -103,6 +103,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         _cameraPosition = sceneAsset.cameraPosition;
         _cameraTarget = sceneAsset.cameraTarget;
         _enablePBR = YES;
+        _maxBounces = 3;
         _emissiveIntensity = 5.0f;
 
         [self loadMetal];
@@ -734,6 +735,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->lightCount = _useBistroPath ? 0 : (unsigned int)_scene.lightCount;
     uniforms->enablePBR = _enablePBR ? 1 : 0;
     uniforms->debugMode = (unsigned int)_debugMode;
+    uniforms->maxBounces = (unsigned int)_maxBounces;
     uniforms->emissiveIntensity = _emissiveIntensity;
     uniforms->emissiveLightCount = _useBistroPath ? (unsigned int)_gpuScene.emissiveLightCount : 0;
     uniforms->emissiveTotalWeight = _useBistroPath ? _gpuScene.emissiveTotalWeight : 0.0f;

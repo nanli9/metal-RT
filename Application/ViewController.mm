@@ -182,6 +182,13 @@ The implementation of the cross-platform view controller.
             [_renderer resetAccumulation];
         }
 
+        const char *bounceItems[] = { "1", "2", "3", "4", "5" };
+        int bounceIdx = _renderer.maxBounces - 1;
+        if (ImGui::Combo("Bounces", &bounceIdx, bounceItems, 5)) {
+            _renderer.maxBounces = bounceIdx + 1;
+            [_renderer resetAccumulation];
+        }
+
         float emissive = _renderer.emissiveIntensity;
         if (ImGui::SliderFloat("Emissive", &emissive, 0.0f, 20.0f, "%.1f")) {
             _renderer.emissiveIntensity = emissive;

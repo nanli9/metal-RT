@@ -436,7 +436,7 @@ kernel void raytracingKernel(
 
         // Simulate up to three ray bounces. Each bounce propagates light backward along the
         // ray's path toward the camera.
-        for (int bounce = 0; bounce < 3; bounce++) {
+        for (int bounce = 0; bounce < (int)uniforms.maxBounces; bounce++) {
             // Get the closest intersection, not the first intersection. This is the default, but
             // the sample adjusts this property below when it casts shadow rays.
             i.accept_any_intersection(false);

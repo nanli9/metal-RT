@@ -54,6 +54,7 @@ struct Uniforms {
     unsigned int lightCount;
     unsigned int enablePBR;  // 0 = flat shading (Phase 4), 1 = full PBR
     unsigned int debugMode;
+    unsigned int maxBounces;
     unsigned int emissiveLightCount;
     float emissiveIntensity;
     float emissiveTotalWeight; // sum of all emissive triangle weights for PDF
