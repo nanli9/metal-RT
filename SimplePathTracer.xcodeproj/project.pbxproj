@@ -655,6 +655,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14;
 				MTL_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=1";
+				OTHER_LDFLAGS = "-weak_framework MetalFX";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.SimplePathTracer-Metal3${SAMPLE_CODE_DISAMBIGUATOR}";
 				PRODUCT_NAME = "SimplePathTracer-Metal3";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -691,6 +692,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14;
 				MTL_PREPROCESSOR_DEFINITIONS = "SUPPORTS_METAL_3=1";
+				OTHER_LDFLAGS = "-weak_framework MetalFX";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.SimplePathTracer-Metal3${SAMPLE_CODE_DISAMBIGUATOR}";
 				PRODUCT_NAME = "SimplePathTracer-Metal3";
 				PROVISIONING_PROFILE_SPECIFIER = "";

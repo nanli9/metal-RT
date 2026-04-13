@@ -379,10 +379,16 @@ kernel void raytracingKernel(
         // Apply a random offset to the random number index to decorrelate pixels.
         unsigned int offset = randomTex.read(tid).x;
 
-        // Add a random offset to the pixel coordinates for antialiasing.
-        float2 r = float2(halton(offset + uniforms.frameIndex, 0),
-                          halton(offset + uniforms.frameIndex, 1));
-
+        // Add sub-pixel offset for antialiasing.
+        // When MetalFX is active, use deterministic jitter (same for all pixels per frame).
+        // Otherwise, use per-pixel random Halton offset.
+        float2 r;
+        if (uniforms.enableMetalFX) {
+            r = float2(uniforms.jitterX + 0.5f, uniforms.jitterY + 0.5f);
+        } else {
+            r = float2(halton(offset + uniforms.frameIndex, 0),
+                        halton(offset + uniforms.frameIndex, 1));
+        }
         pixel += r;
 
         // Map pixel coordinates to -1..1.
@@ -1335,4 +1341,15 @@ kernel void debugVariance(
     // Heat map: low=blue, mid=green, high=red
     float3 color = float3(saturate(viz * 2.0f - 1.0f), saturate(1.0f - abs(viz * 2.0f - 1.0f)), saturate(1.0f - viz * 2.0f));
     outputTex.write(float4(color, 1.0f), tid);
+}
+
+// Simple format conversion: reads RGBA32Float, writes RGBA16Float (for MetalFX input)
+kernel void formatConvert32to16(
+    uint2                            tid    [[thread_position_in_grid]],
+    texture2d<float>                 src    [[texture(0)]],
+    texture2d<float, access::write>  dst    [[texture(1)]]
+)
+{
+    if (tid.x >= src.get_width() || tid.y >= src.get_height()) return;
+    dst.write(src.read(tid), tid);
 }

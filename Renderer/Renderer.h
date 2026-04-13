@@ -12,7 +12,8 @@ The header for the renderer class that performs Metal setup and per-frame render
 
 @class GPUScene;
 @class SceneAsset;
-struct RenderOptions;
+
+#import "RenderOptions.h"
 
 @interface Renderer : NSObject <MTKViewDelegate>
 
@@ -25,15 +26,15 @@ struct RenderOptions;
 
 @property (nonatomic) simd_float3 cameraPosition;
 @property (nonatomic) simd_float3 cameraTarget;
-@property (nonatomic) BOOL enablePBR;
-@property (nonatomic) int debugMode;
-@property (nonatomic) int maxBounces;
-@property (nonatomic) float emissiveIntensity;
+@property (nonatomic) RenderOptions renderOptions;
 
 /// Reset frame accumulation (call when camera moves)
 - (void)resetAccumulation;
 
 /// The command queue used by the renderer (for ImGui to encode after RT passes)
 @property (nonatomic, readonly) id<MTLCommandQueue> commandQueue;
+
+/// Whether the device supports MetalFX Temporal Upscaling
+@property (nonatomic, readonly) bool metalFXSupported;
 
 @end

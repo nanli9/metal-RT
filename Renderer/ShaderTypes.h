@@ -61,6 +61,9 @@ struct Uniforms {
     unsigned int enableShadows;
     unsigned int enableReflections;
     unsigned int denoiserMode; // 0=Off, 1=ATrous, 2=SVGF
+    unsigned int enableMetalFX; // 0=off, 1=on (use deterministic jitter)
+    float jitterX;  // sub-pixel jitter in pixel units [-0.5, 0.5]
+    float jitterY;
     Camera camera;
     matrix_float4x4 viewProjectionMatrix;
     matrix_float4x4 prevViewProjectionMatrix;

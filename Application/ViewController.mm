@@ -210,7 +210,33 @@ The implementation of the cross-platform view controller.
             ImGui::SliderFloat("Sigma Depth", &opts.denoiseSigmaDepth, 0.1f, 10.0f, "%.2f");
         }
 
+        ImGui::Separator();
+        ImGui::Text("Upscaling");
+        bool metalFXChanged = false;
+        if (_renderer.metalFXSupported) {
+            if (ImGui::Checkbox("MetalFX Upscaling", &opts.enableMetalFXUpscaling))
+                metalFXChanged = true;
+            if (opts.enableMetalFXUpscaling) {
+                if (ImGui::SliderFloat("Render Scale", &opts.upscaleRatio, 0.25f, 1.0f, "%.2f"))
+                    metalFXChanged = true;
+                int iw = (int)(_view.drawableSize.width * opts.upscaleRatio);
+                int ih = (int)(_view.drawableSize.height * opts.upscaleRatio);
+                ImGui::Text("Internal: %dx%d  Display: %dx%d",
+                           iw, ih,
+                           (int)_view.drawableSize.width, (int)_view.drawableSize.height);
+            }
+        } else {
+            ImGui::BeginDisabled(true);
+            bool disabled = false;
+            ImGui::Checkbox("MetalFX (not supported)", &disabled);
+            ImGui::EndDisabled();
+        }
+
         _renderer.renderOptions = opts;
+        if (metalFXChanged) {
+            [_renderer mtkView:_view drawableSizeWillChange:_view.drawableSize];
+            rtChanged = true;
+        }
         if (rtChanged)
             [_renderer resetAccumulation];
 

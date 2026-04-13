@@ -29,4 +29,8 @@ struct RenderOptions
     float denoiseSigmaColor   = 1.0f;   // luminance edge-stopping strength
     float denoiseSigmaNormal  = 128.0f; // normal edge-stopping strength
     float denoiseSigmaDepth   = 1.0f;   // depth edge-stopping strength
+
+    // MetalFX Temporal Upscaling
+    bool  enableMetalFXUpscaling = false;
+    float upscaleRatio           = 0.5f; // render at this fraction of display resolution
 };

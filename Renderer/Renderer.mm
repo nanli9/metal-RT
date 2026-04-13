@@ -8,6 +8,12 @@ The implementation of the renderer class that performs Metal setup and per-frame
 #import <simd/simd.h>
 
 #import <MetalKit/MetalKit.h>
+#if __has_include(<MetalFX/MetalFX.h>)
+#import <MetalFX/MetalFX.h>
+#define HAS_METALFX 1
+#else
+#define HAS_METALFX 0
+#endif
 #import "Renderer.h"
 #import "Transforms.h"
 #import "ShaderTypes.h"
@@ -94,6 +100,20 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     matrix_float4x4 _prevViewProjectionMatrix;
     bool _hasPrevViewProjectionMatrix;
     bool _svgfNeedsClear; // flag to clear SVGF history on next frame
+
+    // MetalFX Temporal Upscaling
+#if HAS_METALFX
+    id<MTLFXTemporalScaler> _metalFXScaler;
+#endif
+    id<MTLTexture> _metalFXColorInput;   // RGBA16Float at internal resolution
+    id<MTLTexture> _upscaledOutput;      // RGBA16Float at display resolution
+    id <MTLComputePipelineState> _formatConvertPipeline;
+    bool _metalFXSupported;
+    bool _metalFXNeedsRecreate;
+    CGSize _displaySize;
+    CGSize _internalSize;
+    float _currentJitterX;
+    float _currentJitterY;
 }
 
 - (nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device
@@ -113,6 +133,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         [self createBuffers];
         [self createAccelerationStructures];
         [self createPipelines];
+        [self detectMetalFXSupport];
     }
 
     return self;
@@ -134,11 +155,11 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
         _cameraPosition = sceneAsset.cameraPosition;
         _cameraTarget = sceneAsset.cameraTarget;
-        // RenderOptions struct defaults are set via member initializers
 
         [self loadMetal];
         [self createBistroBuffers];
         [self createBistroPipelines];
+        [self detectMetalFXSupport];
     }
 
     return self;
@@ -152,6 +173,53 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
 - (id<MTLCommandQueue>)commandQueue {
     return _queue;
+}
+
+- (void)detectMetalFXSupport {
+#if HAS_METALFX
+    if (@available(macOS 13.0, *)) {
+        _metalFXSupported = [MTLFXTemporalScalerDescriptor supportsDevice:_device];
+        NSLog(@"MetalFX Temporal Scaler supported: %@", _metalFXSupported ? @"YES" : @"NO");
+    } else {
+        _metalFXSupported = false;
+    }
+#else
+    _metalFXSupported = false;
+#endif
+}
+
+- (bool)metalFXSupported {
+    return _metalFXSupported;
+}
+
+- (void)recreateMetalFXScaler {
+#if HAS_METALFX
+    if (@available(macOS 13.0, *)) {
+        MTLFXTemporalScalerDescriptor *desc = [[MTLFXTemporalScalerDescriptor alloc] init];
+        desc.inputWidth = (NSUInteger)_internalSize.width;
+        desc.inputHeight = (NSUInteger)_internalSize.height;
+        desc.outputWidth = (NSUInteger)_displaySize.width;
+        desc.outputHeight = (NSUInteger)_displaySize.height;
+        desc.colorTextureFormat = MTLPixelFormatRGBA16Float;
+        desc.depthTextureFormat = MTLPixelFormatR32Float;
+        desc.motionTextureFormat = MTLPixelFormatRG16Float;
+        desc.outputTextureFormat = MTLPixelFormatRGBA16Float;
+        desc.autoExposureEnabled = NO;
+
+        _metalFXScaler = [desc newTemporalScalerWithDevice:_device];
+        if (_metalFXScaler) {
+            // Motion vectors are in pixel units; MetalFX scales them by these values
+            // to convert to UV-space (0..1). So we set scale = internalSize.
+            _metalFXScaler.motionVectorScaleX = (float)_internalSize.width;
+            _metalFXScaler.motionVectorScaleY = (float)_internalSize.height;
+            NSLog(@"MetalFX scaler created: %dx%d → %dx%d",
+                  (int)_internalSize.width, (int)_internalSize.height,
+                  (int)_displaySize.width, (int)_displaySize.height);
+        } else {
+            NSLog(@"Failed to create MetalFX temporal scaler");
+        }
+    }
+#endif
 }
 
 // Initialize the Metal shader library and command queue.
@@ -363,6 +431,11 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     fn = [_library newFunctionWithName:@"debugVariance"];
     if (fn) {
         _debugVariancePipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
+    }
+
+    fn = [_library newFunctionWithName:@"formatConvert32to16"];
+    if (fn) {
+        _formatConvertPipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
     }
 }
 
@@ -736,7 +809,18 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size
 {
-    _size = size;
+    _displaySize = size;
+
+    // Compute internal render resolution for MetalFX upscaling
+    bool useMetalFX = _renderOptions.enableMetalFXUpscaling && _metalFXSupported;
+    if (useMetalFX) {
+        float ratio = fmax(_renderOptions.upscaleRatio, 0.25f);
+        _internalSize = CGSizeMake(fmax(size.width * ratio, 1.0),
+                                    fmax(size.height * ratio, 1.0));
+    } else {
+        _internalSize = size;
+    }
+    _size = _internalSize; // _size is used for dispatch calculations
 
     // Create a pair of textures that the ray tracing kernel uses to accumulate
     // samples over several frames.
@@ -744,8 +828,8 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     textureDescriptor.pixelFormat = MTLPixelFormatRGBA32Float;
     textureDescriptor.textureType = MTLTextureType2D;
-    textureDescriptor.width = size.width;
-    textureDescriptor.height = size.height;
+    textureDescriptor.width = _internalSize.width;
+    textureDescriptor.height = _internalSize.height;
 
     // Store the texture in private memory because only the GPU reads or writes this texture.
     textureDescriptor.storageMode = MTLStorageModePrivate;
@@ -814,17 +898,47 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     _randomTexture = [_device newTextureWithDescriptor:textureDescriptor];
 
     // Initialize random values.
-    uint32_t *randomValues = (uint32_t *)malloc(sizeof(uint32_t) * size.width * size.height);
+    NSUInteger rw = (NSUInteger)_internalSize.width;
+    NSUInteger rh = (NSUInteger)_internalSize.height;
+    uint32_t *randomValues = (uint32_t *)malloc(sizeof(uint32_t) * rw * rh);
 
-    for (NSUInteger i = 0; i < size.width * size.height; i++)
+    for (NSUInteger i = 0; i < rw * rh; i++)
         randomValues[i] = rand() % (1024 * 1024);
 
-    [_randomTexture replaceRegion:MTLRegionMake2D(0, 0, size.width, size.height)
+    [_randomTexture replaceRegion:MTLRegionMake2D(0, 0, rw, rh)
                       mipmapLevel:0
                         withBytes:randomValues
-                      bytesPerRow:sizeof(uint32_t) * size.width];
+                      bytesPerRow:sizeof(uint32_t) * rw];
 
     free(randomValues);
+
+    // MetalFX upscaling textures
+    if (useMetalFX) {
+        MTLTextureDescriptor *mfxDesc = [[MTLTextureDescriptor alloc] init];
+        mfxDesc.textureType = MTLTextureType2D;
+        mfxDesc.storageMode = MTLStorageModePrivate;
+        mfxDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+
+        // Color input for MetalFX at internal resolution (RGBA16Float required)
+        mfxDesc.pixelFormat = MTLPixelFormatRGBA16Float;
+        mfxDesc.width = _internalSize.width;
+        mfxDesc.height = _internalSize.height;
+        _metalFXColorInput = [_device newTextureWithDescriptor:mfxDesc];
+
+        // Upscaled output at display resolution
+        mfxDesc.width = _displaySize.width;
+        mfxDesc.height = _displaySize.height;
+        mfxDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+        _upscaledOutput = [_device newTextureWithDescriptor:mfxDesc];
+
+        [self recreateMetalFXScaler];
+    } else {
+        _metalFXColorInput = nil;
+        _upscaledOutput = nil;
+#if HAS_METALFX
+        _metalFXScaler = nil;
+#endif
+    }
 
     _frameIndex = 0;
 }
@@ -862,12 +976,38 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->camera.right *= imagePlaneWidth;
     uniforms->camera.up *= imagePlaneHeight;
 
-    uniforms->width = (unsigned int)_size.width;
-    uniforms->height = (unsigned int)_size.height;
+    // Use internal resolution for RT dispatch when MetalFX is active
+    bool useMetalFX = _renderOptions.enableMetalFXUpscaling && _metalFXSupported;
+    CGSize renderSize = useMetalFX ? _internalSize : _displaySize;
+    uniforms->width = (unsigned int)renderSize.width;
+    uniforms->height = (unsigned int)renderSize.height;
 
     if (!_renderOptions.enableAccumulation)
         _frameIndex = 0;
     uniforms->frameIndex = _frameIndex++;
+
+    // MetalFX jitter: deterministic Halton sequence for TAA
+    uniforms->enableMetalFX = useMetalFX ? 1 : 0;
+    if (useMetalFX) {
+        // Halton sequence with base 2 and 3, mapped to [-0.5, 0.5] pixel range
+        auto haltonSeq = [](int index, int base) -> float {
+            float f = 1.0f, r = 0.0f;
+            int i = index;
+            while (i > 0) {
+                f /= (float)base;
+                r += f * (float)(i % base);
+                i /= base;
+            }
+            return r;
+        };
+        _currentJitterX = haltonSeq(uniforms->frameIndex + 1, 2) - 0.5f;
+        _currentJitterY = haltonSeq(uniforms->frameIndex + 1, 3) - 0.5f;
+        uniforms->jitterX = _currentJitterX;
+        uniforms->jitterY = _currentJitterY;
+    } else {
+        uniforms->jitterX = 0.0f;
+        uniforms->jitterY = 0.0f;
+    }
 
     uniforms->lightCount = _useBistroPath ? 0 : (unsigned int)_scene.lightCount;
     uniforms->enablePBR = _renderOptions.enablePBR ? 1 : 0;
@@ -1168,19 +1308,49 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
         finalColorSource = _denoiserPingPong[(iterations - 1) % 2];
     }
 
+    // ---- MetalFX Temporal Upscaling ----
+#if HAS_METALFX
+    if (@available(macOS 13.0, *)) {
+        bool useMetalFX = _renderOptions.enableMetalFXUpscaling && _metalFXSupported && _metalFXScaler;
+        if (useMetalFX) {
+            // Convert finalColorSource (RGBA32Float) → _metalFXColorInput (RGBA16Float)
+            {
+                id<MTLComputeCommandEncoder> enc = [commandBuffer computeCommandEncoder];
+                [enc setComputePipelineState:_formatConvertPipeline];
+                [enc setTexture:finalColorSource atIndex:0];
+                [enc setTexture:_metalFXColorInput atIndex:1];
+                NSUInteger iw = (NSUInteger)_internalSize.width;
+                NSUInteger ih = (NSUInteger)_internalSize.height;
+                MTLSize tg = MTLSizeMake(8, 8, 1);
+                MTLSize grid = MTLSizeMake((iw + 7) / 8, (ih + 7) / 8, 1);
+                [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+                [enc endEncoding];
+            }
+
+            // Configure and encode the MetalFX temporal scaler
+            _metalFXScaler.colorTexture = _metalFXColorInput;
+            _metalFXScaler.depthTexture = _gbufferDepth;
+            _metalFXScaler.motionTexture = _motionVectorTexture;
+            _metalFXScaler.outputTexture = _upscaledOutput;
+            _metalFXScaler.jitterOffsetX = _currentJitterX;
+            _metalFXScaler.jitterOffsetY = _currentJitterY;
+            _metalFXScaler.reset = (_frameIndex <= 1);
+
+            [_metalFXScaler encodeToCommandBuffer:commandBuffer];
+
+            // Tone-map reads from upscaled output
+            finalColorSource = _upscaledOutput;
+        }
+    }
+#endif
+
     if (view.currentDrawable) {
-        // Copy the resulting image into the view using the graphics pipeline because the sample
-        // can't write directly to it using the compute kernel. The sample delays getting the
-        // current render pass descriptor as long as possible to avoid a lenghty stall waiting
-        // for the GPU/compositor to release a drawable. The drawable may be nil if
-        // the window moves off screen.
         MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
 
         renderPassDescriptor.colorAttachments[0].texture    = view.currentDrawable.texture;
         renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.0f, 0.0f, 0.0f, 1.0f);
 
-        // Create a render command encoder.
         id <MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
 
         [renderEncoder setRenderPipelineState:_copyPipeline];
