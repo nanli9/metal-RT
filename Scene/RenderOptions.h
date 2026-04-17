@@ -29,6 +29,8 @@ struct RenderOptions
     float denoiseSigmaColor   = 1.0f;   // luminance edge-stopping strength
     float denoiseSigmaNormal  = 128.0f; // normal edge-stopping strength
     float denoiseSigmaDepth   = 1.0f;   // depth edge-stopping strength
+    float svgfAlphaColor      = 0.05f;  // SVGF temporal blend alpha floor (0.01-0.5)
+    float svgfHistoryMax      = 32.0f;  // SVGF max history length (4-256)
 
     // MetalFX Temporal Upscaling
     bool  enableMetalFXUpscaling = false;

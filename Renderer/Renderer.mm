@@ -168,7 +168,9 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 - (void)resetAccumulation {
     _frameIndex = 0;
     _svgfNeedsClear = true;
-    _hasPrevViewProjectionMatrix = false;
+    // Note: do NOT clear _hasPrevViewProjectionMatrix here.
+    // The previous VP matrix is still valid and needed for motion vectors
+    // during camera movement — clearing it would zero out all motion vectors.
 }
 
 - (id<MTLCommandQueue>)commandQueue {
@@ -1019,6 +1021,8 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->enableShadows = _renderOptions.enableShadows ? 1 : 0;
     uniforms->enableReflections = _renderOptions.enableReflections ? 1 : 0;
     uniforms->denoiserMode = static_cast<unsigned int>(_renderOptions.denoiserMode);
+    uniforms->svgfAlphaColor = _renderOptions.svgfAlphaColor;
+    uniforms->svgfHistoryMax = _renderOptions.svgfHistoryMax;
 
     // Compute view-projection matrices for SVGF motion vectors
     {
@@ -1244,6 +1248,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
                 params.height = (unsigned int)height;
                 params.temporalBlend = 0.0f; // no temporal fade for SVGF
                 params.isLastIteration = 0;
+                params.iterationIndex = (unsigned int)iter;
 
                 [enc setBytes:&params length:sizeof(params) atIndex:0];
                 [enc setTexture:input atIndex:0];
@@ -1291,6 +1296,7 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
             params.height = (unsigned int)height;
             params.temporalBlend = temporalBlend;
             params.isLastIteration = (iter == iterations - 1) ? 1 : 0;
+            params.iterationIndex = (unsigned int)iter;
 
             [denoiseEncoder setBytes:&params length:sizeof(params) atIndex:0];
             [denoiseEncoder setTexture:input atIndex:0];

@@ -64,6 +64,8 @@ struct Uniforms {
     unsigned int enableMetalFX; // 0=off, 1=on (use deterministic jitter)
     float jitterX;  // sub-pixel jitter in pixel units [-0.5, 0.5]
     float jitterY;
+    float svgfAlphaColor;    // SVGF temporal alpha floor
+    float svgfHistoryMax;    // SVGF history length cap
     Camera camera;
     matrix_float4x4 viewProjectionMatrix;
     matrix_float4x4 prevViewProjectionMatrix;
@@ -124,6 +126,7 @@ struct DenoiserParams {
     unsigned int height;
     float temporalBlend;        // 0..1: how much to blend toward unfiltered (0=full denoise, 1=no denoise)
     unsigned int isLastIteration; // 1 if this is the final A-trous pass
+    unsigned int iterationIndex;  // 0-based A-trous iteration index
 };
 
 #endif

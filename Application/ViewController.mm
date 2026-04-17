@@ -27,11 +27,12 @@ The implementation of the cross-platform view controller.
     NSDate *_fpsLastTime;
 }
 
-/// Parse command-line arguments to determine which scene to load.
-/// Returns nil for Cornell box, or an FBX path string.
-- (NSString *)scenePathFromArguments
+/// Parse command-line arguments to collect FBX paths.
+/// Returns nil for Cornell box, or an array of FBX path strings.
+- (NSArray<NSString *> *)scenePathsFromArguments
 {
     NSArray<NSString *> *args = [NSProcessInfo processInfo].arguments;
+    NSMutableArray<NSString *> *paths = [NSMutableArray new];
 
     for (NSUInteger i = 1; i < args.count; i++) {
         NSString *arg = args[i];
@@ -40,10 +41,10 @@ The implementation of the cross-platform view controller.
         if ([arg caseInsensitiveCompare:@"cornell-box"] == NSOrderedSame)
             return nil;
 
-        return arg;
+        [paths addObject:arg];
     }
 
-    return nil;
+    return paths.count > 0 ? paths : nil;
 }
 
 - (void)viewDidLoad
@@ -75,20 +76,36 @@ The implementation of the cross-platform view controller.
 #endif
     _view.colorPixelFormat = MTLPixelFormatRGBA16Float;
 
-    NSString *fbxPath = [self scenePathFromArguments];
+    NSArray<NSString *> *fbxPaths = [self scenePathsFromArguments];
 
-    if (fbxPath) {
-        if (![fbxPath hasPrefix:@"/"])  {
-            NSString *cwd = [[NSFileManager defaultManager] currentDirectoryPath];
-            fbxPath = [[cwd stringByAppendingPathComponent:fbxPath] stringByStandardizingPath];
+    if (fbxPaths) {
+        // Resolve all paths to absolute and validate
+        NSString *cwd = [[NSFileManager defaultManager] currentDirectoryPath];
+        NSMutableArray<NSString *> *resolvedPaths = [NSMutableArray new];
+        BOOL allExist = YES;
+
+        for (NSString *path in fbxPaths) {
+            NSString *resolved = path;
+            if (![resolved hasPrefix:@"/"])
+                resolved = [[cwd stringByAppendingPathComponent:resolved] stringByStandardizingPath];
+
+            if (![[NSFileManager defaultManager] fileExistsAtPath:resolved]) {
+                NSLog(@"FBX file not found: %@. Falling back to Cornell box.", resolved);
+                allExist = NO;
+                break;
+            }
+            [resolvedPaths addObject:resolved];
         }
 
-        if ([[NSFileManager defaultManager] fileExistsAtPath:fbxPath]) {
-            NSLog(@"Loading scene from %@", fbxPath);
+        if (allExist && resolvedPaths.count > 0) {
+            NSLog(@"Loading %lu FBX file(s)...", (unsigned long)resolvedPaths.count);
+            for (NSString *p in resolvedPaths)
+                NSLog(@"  %@", p.lastPathComponent);
+
             NSError *error = nil;
-            SceneAsset *sceneAsset = [SceneLoader loadSceneFromFBX:fbxPath
-                                                            device:_view.device
-                                                             error:&error];
+            SceneAsset *sceneAsset = [SceneLoader loadSceneFromFBXPaths:resolvedPaths
+                                                                 device:_view.device
+                                                                  error:&error];
             if (sceneAsset) {
                 GPUScene *gpuScene = [[GPUScene alloc] init];
                 [SceneUploader uploadScene:sceneAsset toGPUScene:gpuScene device:_view.device];
@@ -103,15 +120,12 @@ The implementation of the cross-platform view controller.
                                                     gpuScene:gpuScene
                                                   sceneAsset:sceneAsset];
 
-                // Create camera controller from scene default camera
                 _cameraController = [[CameraController alloc]
                     initWithPosition:sceneAsset.cameraPosition
                               target:sceneAsset.cameraTarget];
             } else {
                 NSLog(@"Failed to load scene: %@. Falling back to Cornell box.", error.localizedDescription);
             }
-        } else {
-            NSLog(@"FBX file not found: %@. Falling back to Cornell box.", fbxPath);
         }
     }
 
@@ -208,6 +222,10 @@ The implementation of the cross-platform view controller.
             ImGui::SliderFloat("Sigma Color", &opts.denoiseSigmaColor, 0.1f, 10.0f, "%.2f");
             ImGui::SliderFloat("Sigma Normal", &opts.denoiseSigmaNormal, 1.0f, 256.0f, "%.0f");
             ImGui::SliderFloat("Sigma Depth", &opts.denoiseSigmaDepth, 0.1f, 10.0f, "%.2f");
+            if (opts.denoiserMode == DenoiserMode::SVGF) {
+                ImGui::SliderFloat("SVGF Alpha Floor", &opts.svgfAlphaColor, 0.01f, 0.5f, "%.3f");
+                ImGui::SliderFloat("SVGF History Max", &opts.svgfHistoryMax, 4.0f, 256.0f, "%.0f");
+            }
         }
 
         ImGui::Separator();

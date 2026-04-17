@@ -1038,9 +1038,10 @@ kernel void atrousDenoiser(
             float normalDot = max(dot(centerNormal, sampleNormal), 0.0f);
             float wNormal = pow(normalDot, params.sigmaNormal);
 
-            // Edge-stopping: depth
+            // Edge-stopping: depth (scaled by step size to tolerate larger depth deltas at wider radii)
+            float pixelDist = length(float2(dx, dy));
             float depthDiff = abs(centerDepth - sampleDepth) / (centerDepth + 1e-6f);
-            float wDepth = exp(-depthDiff / (params.sigmaDepth + 1e-6f));
+            float wDepth = exp(-depthDiff / (params.sigmaDepth * float(step) * max(pixelDist, 1.0f) + 1e-6f));
 
             float w = kernelWeight * wColor * wNormal * wDepth;
             colorSum += sampleColor * w;
@@ -1180,20 +1181,38 @@ kernel void svgfTemporalAccumulation(
     if (valid) {
         uint2 prevTid = uint2(clamp(prevPixel, float2(0), float2(uniforms.width - 1, uniforms.height - 1)));
 
+        // Neighborhood clamping: compute min/max color in 3x3 current-frame neighborhood
+        // to reject stale history values (e.g., moved specular highlights)
+        float3 neighborMin = color;
+        float3 neighborMax = color;
+        for (int ny = -1; ny <= 1; ny++) {
+            for (int nx = -1; nx <= 1; nx++) {
+                int2 np = clamp(int2(tid) + int2(nx, ny), int2(0),
+                                int2(uniforms.width - 1, uniforms.height - 1));
+                float3 nc = currentColor.read(uint2(np)).xyz;
+                float ncLum = dot(nc, float3(0.2126f, 0.7152f, 0.0722f));
+                if (ncLum > 10.0f) nc *= 10.0f / ncLum; // same firefly clamp
+                neighborMin = min(neighborMin, nc);
+                neighborMax = max(neighborMax, nc);
+            }
+        }
+
         float3 histColor = prevColorHist.read(prevTid).xyz;
+        histColor = clamp(histColor, neighborMin, neighborMax); // reject outlier history
         float2 histMoments = prevMomentHist.read(prevTid).xy;
         float  histLen = prevHistLen.read(prevTid).x;
 
         // Exponential moving average: increase history length, compute blend alpha
-        float newHistLen = min(histLen + 1.0f, 256.0f); // cap at 256 frames for smooth convergence
-        float alpha = 1.0f / newHistLen;                  // decreasing alpha for smooth averaging
+        float newHistLen = min(histLen + 1.0f, uniforms.svgfHistoryMax);
+        float alpha = max(1.0f / newHistLen, uniforms.svgfAlphaColor);
 
         // Blend color
         float3 blendedColor = mix(histColor, color, alpha);
 
-        // Blend moments
+        // Blend moments (faster-reacting alpha so variance tracks lighting changes)
+        float alphaMoments = max(1.0f / newHistLen, 0.2f);
         float2 newMoments = float2(lum, lum * lum);
-        float2 blendedMoments = mix(histMoments, newMoments, alpha);
+        float2 blendedMoments = mix(histMoments, newMoments, alphaMoments);
 
         outColorHist.write(float4(blendedColor, 1.0f), tid);
         outMomentHist.write(float4(blendedMoments, 0, 0), tid);
@@ -1226,12 +1245,12 @@ kernel void svgfEstimateVariance(
     // Variance = E[x^2] - E[x]^2
     float variance = max(moments.y - moments.x * moments.x, 0.0f);
 
-    // For short history (< 4 frames), use spatial fallback to stabilize variance estimate
+    // For short history (< 4 frames), use 7x7 spatial fallback with boost (Falcor reference)
     if (histLen < 4.0f) {
         float sumVariance = 0.0f;
         float count = 0.0f;
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -3; dy <= 3; dy++) {
+            for (int dx = -3; dx <= 3; dx++) {
                 int2 sp = clamp(int2(tid) + int2(dx, dy), int2(0), int2(uniforms.width - 1, uniforms.height - 1));
                 float2 sm = momentTex.read(uint2(sp)).xy;
                 float sv = max(sm.y - sm.x * sm.x, 0.0f);
@@ -1240,6 +1259,8 @@ kernel void svgfEstimateVariance(
             }
         }
         variance = sumVariance / count;
+        // Boost variance for very short histories to ensure aggressive filtering
+        variance *= max(1.0f, 4.0f / max(histLen, 1.0f));
     }
 
     varianceTex.write(float4(variance, 0, 0, 0), tid);
@@ -1299,8 +1320,10 @@ kernel void svgfAtrousFilter(
             float normalDot = max(dot(centerNormal, sampleNormal), 0.0f);
             float wNormal = pow(normalDot, params.sigmaNormal);
 
+            // Depth edge-stopping scaled by step size (wider radius tolerates larger depth deltas)
+            float pixelDist = length(float2(dx, dy));
             float depthDiff = abs(centerDepth - sampleDepth) / (centerDepth + 1e-6f);
-            float wDepth = exp(-depthDiff / (params.sigmaDepth + 1e-6f));
+            float wDepth = exp(-depthDiff / (params.sigmaDepth * float(step) * max(pixelDist, 1.0f) + 1e-6f));
 
             float w = kernelWeight * wColor * wNormal * wDepth;
             colorSum += sampleColor * w;
@@ -1336,8 +1359,9 @@ kernel void debugVariance(
 {
     if (tid.x >= uniforms.width || tid.y >= uniforms.height) return;
     float v = varTex.read(tid).x;
-    // Scale variance for visualization (0-1 range, boosted)
-    float viz = saturate(v * 10.0f);
+    // Log-scale variance for visualization (small variances are still visible)
+    // Maps variance 0.0001 → 0.0, 1.0 → 1.0 on a log scale
+    float viz = saturate(log2(max(v, 1e-6f) * 10000.0f) / 13.3f); // log2(10000)/log2(10000) = 1.0
     // Heat map: low=blue, mid=green, high=red
     float3 color = float3(saturate(viz * 2.0f - 1.0f), saturate(1.0f - abs(viz * 2.0f - 1.0f)), saturate(1.0f - viz * 2.0f));
     outputTex.write(float4(color, 1.0f), tid);
