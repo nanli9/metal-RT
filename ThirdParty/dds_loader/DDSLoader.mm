@@ -43,19 +43,25 @@ struct DDSHeader {
 };
 
 /// Returns the Metal pixel format for a given FourCC code, or MTLPixelFormatInvalid if unsupported.
-static MTLPixelFormat pixelFormatForFourCC(uint32_t fourCC) {
-    if (fourCC == FOURCC_DXT1) return MTLPixelFormatBC1_RGBA;
-    if (fourCC == FOURCC_DXT5) return MTLPixelFormatBC3_RGBA;
-    if (fourCC == FOURCC_ATI2) return MTLPixelFormatBC5_RGUnorm;
+/// When sRGB is true, color formats (BC1/BC3) use sRGB variants for hardware auto-linearization.
+static MTLPixelFormat pixelFormatForFourCC(uint32_t fourCC, bool sRGB) {
+    if (fourCC == FOURCC_DXT1) return sRGB ? MTLPixelFormatBC1_RGBA_sRGB : MTLPixelFormatBC1_RGBA;
+    if (fourCC == FOURCC_DXT5) return sRGB ? MTLPixelFormatBC3_RGBA_sRGB : MTLPixelFormatBC3_RGBA;
+    if (fourCC == FOURCC_ATI2) return MTLPixelFormatBC5_RGUnorm; // no sRGB variant (data texture)
     return MTLPixelFormatInvalid;
 }
 
 /// Returns the block size in bytes for a given BCn pixel format.
 static NSUInteger blockSizeForFormat(MTLPixelFormat format) {
     switch (format) {
-        case MTLPixelFormatBC1_RGBA: return 8;   // 4x4 block = 8 bytes
-        case MTLPixelFormatBC3_RGBA: return 16;  // 4x4 block = 16 bytes
-        case MTLPixelFormatBC5_RGUnorm: return 16; // 4x4 block = 16 bytes
+        case MTLPixelFormatBC1_RGBA:
+        case MTLPixelFormatBC1_RGBA_sRGB:
+            return 8;   // 4x4 block = 8 bytes
+        case MTLPixelFormatBC3_RGBA:
+        case MTLPixelFormatBC3_RGBA_sRGB:
+            return 16;  // 4x4 block = 16 bytes
+        case MTLPixelFormatBC5_RGUnorm:
+            return 16;  // 4x4 block = 16 bytes
         default: return 0;
     }
 }
@@ -71,6 +77,14 @@ static NSUInteger bytesForMipLevel(NSUInteger width, NSUInteger height, NSUInteg
 
 + (id<MTLTexture>)loadTextureFromPath:(NSString *)path
                                device:(id<MTLDevice>)device
+                                error:(NSError **)error
+{
+    return [self loadTextureFromPath:path device:device sRGB:NO error:error];
+}
+
++ (id<MTLTexture>)loadTextureFromPath:(NSString *)path
+                               device:(id<MTLDevice>)device
+                                 sRGB:(BOOL)sRGB
                                 error:(NSError **)error
 {
     NSData *data = [NSData dataWithContentsOfFile:path options:0 error:error];
@@ -104,7 +118,7 @@ static NSUInteger bytesForMipLevel(NSUInteger width, NSUInteger height, NSUInteg
         return nil;
     }
 
-    MTLPixelFormat pixelFormat = pixelFormatForFourCC(header.pixelFormat.fourCC);
+    MTLPixelFormat pixelFormat = pixelFormatForFourCC(header.pixelFormat.fourCC, sRGB);
     if (pixelFormat == MTLPixelFormatInvalid) {
         char cc[5] = {};
         memcpy(cc, &header.pixelFormat.fourCC, 4);

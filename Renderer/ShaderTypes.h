@@ -62,10 +62,13 @@ struct Uniforms {
     unsigned int enableReflections;
     unsigned int denoiserMode; // 0=Off, 1=ATrous, 2=SVGF
     unsigned int enableMetalFX; // 0=off, 1=on (use deterministic jitter)
+    unsigned int toneMapMode;  // 0=Reinhard, 1=ACES, 2=AgX
     float jitterX;  // sub-pixel jitter in pixel units [-0.5, 0.5]
     float jitterY;
     float svgfAlphaColor;    // SVGF temporal alpha floor
     float svgfHistoryMax;    // SVGF history length cap
+    unsigned int enableHDR;  // 0=SDR, 1=HDR (EDR output)
+    float hdrHeadroom;       // max EDR value (1.0=SDR, e.g. 3.0 for 3x headroom)
     Camera camera;
     matrix_float4x4 viewProjectionMatrix;
     matrix_float4x4 prevViewProjectionMatrix;
@@ -113,6 +116,18 @@ struct GPUMaterial {
     unsigned int normalTextureIndex;
     unsigned int specularTextureIndex;   // ORM packed
     unsigned int emissiveTextureIndex;
+};
+
+// ---- Bloom types ----
+
+struct BloomParams {
+    float threshold;       // luminance threshold for extraction
+    float intensity;       // bloom composite strength
+    unsigned int srcWidth;
+    unsigned int srcHeight;
+    unsigned int dstWidth;
+    unsigned int dstHeight;
+    unsigned int mipLevel; // current mip level being processed
 };
 
 // ---- Denoiser types ----

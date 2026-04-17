@@ -91,6 +91,8 @@
 		A1B2C308000000000000B002 /* CameraController.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C308000000000000F001 /* CameraController.mm */; };
 		A1B2C309000000000000B001 /* ImGuiRenderer.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C309000000000000F001 /* ImGuiRenderer.mm */; };
 		A1B2C309000000000000B002 /* ImGuiRenderer.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C309000000000000F001 /* ImGuiRenderer.mm */; };
+		A1B2C30A000000000000B001 /* ImportedSceneMerge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C30A000000000000F001 /* ImportedSceneMerge.cpp */; };
+		A1B2C30A000000000000B002 /* ImportedSceneMerge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C30A000000000000F001 /* ImportedSceneMerge.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -144,6 +146,7 @@
 		A1B2C307000000000000F003 /* AccelerationStructureBuilder.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AccelerationStructureBuilder.mm; sourceTree = "<group>"; };
 		A1B2C308000000000000F001 /* CameraController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "Scene/CameraController.mm"; sourceTree = SOURCE_ROOT; };
 		A1B2C309000000000000F001 /* ImGuiRenderer.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "Application/ImGuiRenderer.mm"; sourceTree = SOURCE_ROOT; };
+		A1B2C30A000000000000F001 /* ImportedSceneMerge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "Import/ImportedSceneMerge.cpp"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -346,6 +349,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C305000000000000F001 /* SceneImporter.mm */,
+				A1B2C30A000000000000F001 /* ImportedSceneMerge.cpp */,
 			);
 			path = Import;
 			sourceTree = "<group>";
@@ -524,6 +528,7 @@
 				A1B2C302000000000000B007 /* imgui_impl_osx.mm in Sources */,
 				A1B2C302000000000000B008 /* DDSLoader.mm in Sources */,
 				A1B2C305000000000000B001 /* SceneImporter.mm in Sources */,
+				A1B2C30A000000000000B001 /* ImportedSceneMerge.cpp in Sources */,
 				A1B2C306000000000000B001 /* TextureAsset.mm in Sources */,
 				A1B2C306000000000000B002 /* TextureCache.mm in Sources */,
 				A1B2C306000000000000B003 /* MaterialAsset.mm in Sources */,
@@ -587,6 +592,7 @@
 				A1B2C303000000000000B007 /* imgui_impl_osx.mm in Sources */,
 				A1B2C303000000000000B008 /* DDSLoader.mm in Sources */,
 				A1B2C305000000000000B002 /* SceneImporter.mm in Sources */,
+				A1B2C30A000000000000B002 /* ImportedSceneMerge.cpp in Sources */,
 				A1B2C306000000000000B011 /* TextureAsset.mm in Sources */,
 				A1B2C306000000000000B012 /* TextureCache.mm in Sources */,
 				A1B2C306000000000000B013 /* MaterialAsset.mm in Sources */,

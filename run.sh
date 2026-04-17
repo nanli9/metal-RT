@@ -5,6 +5,7 @@
 #   ./run.sh                                — Cornell box (default)
 #   ./run.sh cornell-box                    — Cornell box (explicit)
 #   ./run.sh path/to/scene.fbx             — load FBX scene
+#   ./run.sh a.fbx b.fbx c.fbx            — load + merge multiple FBX files
 #   ./run.sh Bistro_v5_2/BistroExterior.fbx — load Bistro
 #   ./run.sh test-import [path.fbx]         — FBX import test -> log.txt
 #   ./run.sh test-scene  [path.fbx]         — scene loading test -> log.txt
@@ -20,7 +21,7 @@ cd "$SCRIPT_DIR"
 SCHEME="macOS - Metal3 - SimplePathTracer"
 PROJECT="SimplePathTracer.xcodeproj"
 
-COMMON_SRCS="Import/SceneImporter.mm ThirdParty/ufbx/ufbx.c"
+COMMON_SRCS="Import/SceneImporter.mm Import/ImportedSceneMerge.cpp ThirdParty/ufbx/ufbx.c"
 COMMON_FLAGS="-std=c++17 -fobjc-arc -O1 -I ThirdParty/ufbx -I ThirdParty/dds_loader -I Import -I Scene -I Renderer -I GPU"
 
 if [ "$1" = "test-import" ]; then
@@ -87,27 +88,37 @@ else
 
     EXE="$APP/Contents/MacOS/SimplePathTracer-Metal3"
 
-    # Determine scene argument: no arg or "cornell-box" (case-insensitive) = Cornell box
-    SCENE_ARG="${1:-cornell-box}"
-
-    # Resolve relative FBX paths to absolute
-    if echo "$SCENE_ARG" | grep -iq "^cornell-box$"; then
-        echo "Running with Cornell box scene"
-        SCENE_ARG="cornell-box"
-    else
-        # Make path absolute if relative
-        if [[ "$SCENE_ARG" != /* ]]; then
-            SCENE_ARG="$SCRIPT_DIR/$SCENE_ARG"
+    # Collect scene arguments: no args or "cornell-box" = Cornell box
+    # Multiple FBX paths are resolved and passed through
+    SCENE_ARGS=()
+    for arg in "$@"; do
+        if echo "$arg" | grep -iq "^cornell-box$"; then
+            SCENE_ARGS=("cornell-box")
+            break
         fi
-        if [ ! -f "$SCENE_ARG" ]; then
-            echo "ERROR: FBX file not found: $SCENE_ARG"
+        # Make path absolute if relative
+        if [[ "$arg" != /* ]]; then
+            arg="$SCRIPT_DIR/$arg"
+        fi
+        if [ ! -f "$arg" ]; then
+            echo "ERROR: FBX file not found: $arg"
             exit 1
         fi
-        echo "Running with scene: $SCENE_ARG"
+        SCENE_ARGS+=("$arg")
+    done
+
+    if [ ${#SCENE_ARGS[@]} -eq 0 ]; then
+        echo "Running with Cornell box scene"
+        SCENE_ARGS=("cornell-box")
+    elif [ ${#SCENE_ARGS[@]} -eq 1 ] && echo "${SCENE_ARGS[0]}" | grep -iq "^cornell-box$"; then
+        echo "Running with Cornell box scene"
+    else
+        echo "Running with ${#SCENE_ARGS[@]} FBX file(s):"
+        for s in "${SCENE_ARGS[@]}"; do echo "  $s"; done
     fi
 
     echo "Console output -> log.txt"
     echo "---"
 
-    "$EXE" "$SCENE_ARG" 2>&1 | tee log.txt
+    "$EXE" "${SCENE_ARGS[@]}" 2>&1 | tee log.txt
 fi

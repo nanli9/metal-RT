@@ -25,6 +25,7 @@ The implementation of the renderer class that performs Metal setup and per-frame
 using namespace simd;
 
 static const NSUInteger maxFramesInFlight = 3;
+static const int kMaxBloomMips = 6;
 static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
 @implementation Renderer
@@ -114,6 +115,13 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     CGSize _internalSize;
     float _currentJitterX;
     float _currentJitterY;
+
+    // Bloom (6 mip levels max)
+    id <MTLTexture> _bloomMipChainA[6]; // downsample chain / upsample result
+    id <MTLTexture> _bloomMipChainB[6]; // ping-pong for blur
+    id <MTLComputePipelineState> _bloomThresholdPipeline;
+    id <MTLComputePipelineState> _bloomDownsamplePipeline;
+    id <MTLComputePipelineState> _bloomUpsamplePipeline;
 }
 
 - (nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device
@@ -438,6 +446,20 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     fn = [_library newFunctionWithName:@"formatConvert32to16"];
     if (fn) {
         _formatConvertPipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
+    }
+
+    // Bloom pipelines
+    fn = [_library newFunctionWithName:@"bloomThreshold"];
+    if (fn) {
+        _bloomThresholdPipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
+    }
+    fn = [_library newFunctionWithName:@"bloomDownsample"];
+    if (fn) {
+        _bloomDownsamplePipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
+    }
+    fn = [_library newFunctionWithName:@"bloomUpsample"];
+    if (fn) {
+        _bloomUpsamplePipeline = [_device newComputePipelineStateWithFunction:fn error:&error];
     }
 }
 
@@ -914,6 +936,28 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
     free(randomValues);
 
+    // Bloom mip chain textures (based on internal render resolution)
+    {
+        MTLTextureDescriptor *bloomDesc = [[MTLTextureDescriptor alloc] init];
+        bloomDesc.textureType = MTLTextureType2D;
+        bloomDesc.pixelFormat = MTLPixelFormatRGBA16Float;
+        bloomDesc.storageMode = MTLStorageModePrivate;
+        bloomDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+
+        NSUInteger mipW = (NSUInteger)_internalSize.width / 2;
+        NSUInteger mipH = (NSUInteger)_internalSize.height / 2;
+        for (int i = 0; i < kMaxBloomMips; i++) {
+            mipW = MAX(mipW, 1u);
+            mipH = MAX(mipH, 1u);
+            bloomDesc.width = mipW;
+            bloomDesc.height = mipH;
+            _bloomMipChainA[i] = [_device newTextureWithDescriptor:bloomDesc];
+            _bloomMipChainB[i] = [_device newTextureWithDescriptor:bloomDesc];
+            mipW /= 2;
+            mipH /= 2;
+        }
+    }
+
     // MetalFX upscaling textures
     if (useMetalFX) {
         MTLTextureDescriptor *mfxDesc = [[MTLTextureDescriptor alloc] init];
@@ -1021,8 +1065,11 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     uniforms->enableShadows = _renderOptions.enableShadows ? 1 : 0;
     uniforms->enableReflections = _renderOptions.enableReflections ? 1 : 0;
     uniforms->denoiserMode = static_cast<unsigned int>(_renderOptions.denoiserMode);
+    uniforms->toneMapMode = static_cast<unsigned int>(_renderOptions.toneMapMode);
     uniforms->svgfAlphaColor = _renderOptions.svgfAlphaColor;
     uniforms->svgfHistoryMax = _renderOptions.svgfHistoryMax;
+    uniforms->enableHDR = _renderOptions.enableHDR ? 1 : 0;
+    uniforms->hdrHeadroom = _renderOptions.hdrHeadroom;
 
     // Compute view-projection matrices for SVGF motion vectors
     {
@@ -1350,6 +1397,86 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
     }
 #endif
 
+    // ---- Bloom Pass ----
+    bool bloomActive = _renderOptions.enableBloom && _bloomThresholdPipeline && _bloomMipChainA[0];
+    if (bloomActive) {
+        int mipLevels = MIN(_renderOptions.bloomMipLevels, kMaxBloomMips);
+        MTLSize tg = MTLSizeMake(8, 8, 1);
+
+        // Step 1: Threshold extraction — extract bright pixels from HDR buffer into mip 0
+        {
+            id<MTLComputeCommandEncoder> enc = [commandBuffer computeCommandEncoder];
+            [enc setComputePipelineState:_bloomThresholdPipeline];
+            BloomParams params;
+            params.threshold = _renderOptions.bloomThreshold;
+            params.intensity = _renderOptions.bloomIntensity;
+            params.srcWidth = (unsigned int)finalColorSource.width;
+            params.srcHeight = (unsigned int)finalColorSource.height;
+            params.dstWidth = (unsigned int)_bloomMipChainA[0].width;
+            params.dstHeight = (unsigned int)_bloomMipChainA[0].height;
+            params.mipLevel = 0;
+            [enc setBytes:&params length:sizeof(params) atIndex:0];
+            [enc setTexture:finalColorSource atIndex:0];
+            [enc setTexture:_bloomMipChainA[0] atIndex:1];
+            MTLSize grid = MTLSizeMake((params.dstWidth + 7) / 8, (params.dstHeight + 7) / 8, 1);
+            [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+            [enc endEncoding];
+        }
+
+        // Step 2: Progressive downsample through mip chain
+        for (int i = 1; i < mipLevels; i++) {
+            id<MTLComputeCommandEncoder> enc = [commandBuffer computeCommandEncoder];
+            [enc setComputePipelineState:_bloomDownsamplePipeline];
+            BloomParams params;
+            params.threshold = 0;
+            params.intensity = 0;
+            params.srcWidth = (unsigned int)_bloomMipChainA[i-1].width;
+            params.srcHeight = (unsigned int)_bloomMipChainA[i-1].height;
+            params.dstWidth = (unsigned int)_bloomMipChainA[i].width;
+            params.dstHeight = (unsigned int)_bloomMipChainA[i].height;
+            params.mipLevel = (unsigned int)i;
+            [enc setBytes:&params length:sizeof(params) atIndex:0];
+            [enc setTexture:_bloomMipChainA[i-1] atIndex:0];
+            [enc setTexture:_bloomMipChainA[i] atIndex:1];
+            MTLSize grid = MTLSizeMake((params.dstWidth + 7) / 8, (params.dstHeight + 7) / 8, 1);
+            [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+            [enc endEncoding];
+        }
+
+        // Step 3: Progressive upsample from smallest mip back to mip 0
+        // Start from second-smallest mip and upsample the one below it
+        for (int i = mipLevels - 2; i >= 0; i--) {
+            id<MTLComputeCommandEncoder> enc = [commandBuffer computeCommandEncoder];
+            [enc setComputePipelineState:_bloomUpsamplePipeline];
+            // Source: the smaller mip (i+1), which already has accumulated bloom from below
+            id<MTLTexture> srcMip = (i == mipLevels - 2) ? _bloomMipChainA[i+1] : _bloomMipChainB[i+1];
+            BloomParams params;
+            params.threshold = 0;
+            params.intensity = 0;
+            params.srcWidth = (unsigned int)srcMip.width;
+            params.srcHeight = (unsigned int)srcMip.height;
+            params.dstWidth = (unsigned int)_bloomMipChainA[i].width;
+            params.dstHeight = (unsigned int)_bloomMipChainA[i].height;
+            params.mipLevel = (unsigned int)i;
+            [enc setBytes:&params length:sizeof(params) atIndex:0];
+            [enc setTexture:srcMip atIndex:0];
+            [enc setTexture:_bloomMipChainA[i] atIndex:1]; // downsample result at this level
+            [enc setTexture:_bloomMipChainB[i] atIndex:2]; // output with upsample blended
+            MTLSize grid = MTLSizeMake((params.dstWidth + 7) / 8, (params.dstHeight + 7) / 8, 1);
+            [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+            [enc endEncoding];
+        }
+    }
+
+    // ---- Debug: Bloom Only (mode 20) ----
+    id<MTLTexture> bloomResultForComposite = bloomActive ? _bloomMipChainB[0] : nil;
+    if (_renderOptions.debugMode == 20 && bloomResultForComposite) {
+        // For "Bloom Only" debug mode, we write the bloom into the finalColorSource directly
+        // so the tone mapper shows just the bloom contribution
+        finalColorSource = bloomResultForComposite;
+        bloomResultForComposite = nil; // don't add it again in composite
+    }
+
     if (view.currentDrawable) {
         MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
 
@@ -1363,8 +1490,26 @@ static const size_t alignedUniformsSize = (sizeof(Uniforms) + 255) & ~255;
 
         [renderEncoder setFragmentTexture:finalColorSource atIndex:0];
 
-        float exposure = _renderOptions.exposureAdjust;
-        [renderEncoder setFragmentBytes:&exposure length:sizeof(float) atIndex:0];
+        // Bloom texture (mip 0 of upsample result)
+        if (bloomResultForComposite) {
+            [renderEncoder setFragmentTexture:bloomResultForComposite atIndex:1];
+        }
+
+        struct {
+            float exposureAdjust;
+            uint32_t toneMapMode;
+            float bloomIntensity;
+            uint32_t enableBloom;
+            uint32_t enableHDR;
+            float hdrHeadroom;
+        } toneMapParams;
+        toneMapParams.exposureAdjust = _renderOptions.exposureAdjust;
+        toneMapParams.toneMapMode = static_cast<uint32_t>(_renderOptions.toneMapMode);
+        toneMapParams.bloomIntensity = _renderOptions.bloomIntensity;
+        toneMapParams.enableBloom = (bloomResultForComposite != nil) ? 1 : 0;
+        toneMapParams.enableHDR = _renderOptions.enableHDR ? 1 : 0;
+        toneMapParams.hdrHeadroom = _renderOptions.hdrHeadroom;
+        [renderEncoder setFragmentBytes:&toneMapParams length:sizeof(toneMapParams) atIndex:0];
 
         // Draw a quad which fills the screen.
         [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];

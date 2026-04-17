@@ -66,3 +66,8 @@ struct ImportedScene {
     uint64_t totalTriangles = 0;
     uint64_t totalVertices  = 0;
 };
+
+/// Merge two imported scenes into one. Material/mesh/node indices in B are
+/// remapped so they follow A's entries in the concatenated arrays.
+/// Caller owns the returned pointer.
+ImportedScene *mergeImportedScenes(const ImportedScene &a, const ImportedScene &b);

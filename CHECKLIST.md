@@ -151,14 +151,27 @@ _Goal: Temporal reprojection + variance-guided filtering for superior denoising.
 ---
 
 ## Phase 9: ReSTIR DI (Direct Illumination)
-_Goal: Reservoir-based spatiotemporal importance resampling for cleaner emissive light sampling._
+_Goal: Reservoir-based spatiotemporal importance resampling for cleaner 1-spp direct lighting from many emissive lights._
 
-- [ ] **9.1** Define `Reservoir` struct in `ShaderTypes.h`. Allocate two reservoir buffers (temporal ping-pong). Add ReSTIR options to `RenderOptions.h`.
-- [ ] **9.2** Write `restirInitialCandidates` compute kernel. Generate N candidates via CDF, streaming RIS to keep one winner per pixel.
-- [ ] **9.3** Write `restirTemporalReuse` kernel. Combine with previous frame's reservoir at reprojected position. Validate + clamp M.
-- [ ] **9.4** Write `restirSpatialReuse` kernel. Combine with k random neighbors. Re-evaluate target PDF at current shading point.
-- [ ] **9.5** Integrate ReSTIR into `raytracingKernel`. Replace inline NEE with reservoir read. Shadow ray validation. Add `enableReSTIR` to Uniforms.
-- [ ] **9.6** Wire ReSTIR controls in ImGui. Visibility bias correction if needed. Proper reset handling.
+### Sub-phase 9A: Data Structures & Initial Candidates
+- [ ] **9.1** Define `Reservoir` struct in `ShaderTypes.h`: `lightSample` (position, normal, emission, triangleIndex), `weightSum` (streaming RIS weight), `M` (sample count), `W` (unbiased contribution weight). Keep it compact (≤64 bytes).
+- [ ] **9.2** Add ReSTIR options to `RenderOptions.h`: `enableReSTIR` (bool), `restirTemporalMaxM` (int, default 20), `restirSpatialNeighbors` (int, default 5), `restirSpatialRadius` (float, default 30px).
+- [ ] **9.3** Allocate reservoir textures/buffers in `Renderer.mm`: two reservoir buffers (temporal ping-pong, `width * height * sizeof(Reservoir)`), G-buffer shading data buffer (position, normal, albedo per pixel for MIS weight re-evaluation).
+- [ ] **9.4** Write `restirInitialCandidates` compute kernel in `Shaders.metal`. For each pixel: generate N light candidates (N=32) via emissive triangle CDF (already exists in `_emissiveCDFBuffer`), evaluate target PDF `p_hat = Le * G * V_approx` (skip visibility for initial), apply streaming RIS (Talbot 2005) to keep one winning sample per pixel. Output to current reservoir buffer.
+
+### Sub-phase 9B: Temporal Reuse
+- [ ] **9.5** Write `restirTemporalReuse` kernel. Read motion vectors to find previous pixel, load previous reservoir. Validate: depth/normal consistency check (reuse existing thresholds from SVGF). Clamp previous `M` to `restirTemporalMaxM` to limit staleness. Combine current + previous reservoir via streaming RIS. Output merged reservoir.
+- [ ] **9.6** Handle disocclusion: if temporal neighbor invalid, keep only current reservoir (M=1). Reset reservoirs on camera move (clear buffers).
+
+### Sub-phase 9C: Spatial Reuse
+- [ ] **9.7** Write `restirSpatialReuse` kernel. For each pixel, select `k` random neighbors within `restirSpatialRadius` pixels. For each neighbor: load its reservoir, re-evaluate target PDF `p_hat` at *current* pixel's shading point (Jacobian for solid angle change). Combine via streaming RIS. This is where the main quality boost comes from.
+- [ ] **9.8** Visibility reuse check: trace shadow ray to validate the winning sample's visibility at the current pixel. Store final `W = (1/p_hat) * (1/M) * weightSum` for unbiased contribution weight.
+
+### Sub-phase 9D: Integration & Controls
+- [ ] **9.9** Integrate ReSTIR output into `raytracingKernel`. Replace inline NEE (emissive CDF sampling + shadow ray) with reservoir read when `enableReSTIR` is true. Final contribution = `reservoir.lightSample.emission * BRDF * G * reservoir.W`. Add `enableReSTIR` to Uniforms.
+- [ ] **9.10** Dispatch order in `Renderer.mm`: RT kernel (with G-buffer write) → initial candidates → temporal reuse → spatial reuse → RT kernel reads reservoir for shading (or: two-pass approach where first pass writes G-buffer, second pass does shading with reservoir).
+- [ ] **9.11** Wire ImGui controls: ReSTIR enable toggle, temporal M cap slider, spatial neighbor count slider, spatial radius slider. Add debug mode "ReSTIR Reservoir M" heatmap.
+- [ ] **9.12** Test: compare 1-spp noise with ReSTIR on vs off. Verify temporal stability, no light leaking at depth discontinuities, proper reset on camera move.
 
 **STOP — wait for user review before starting Phase 10.**
 
@@ -173,6 +186,55 @@ _Goal: Render at lower resolution, use MetalFX to upscale to display resolution.
 - [x] **10.4** Create `MTLFXTemporalScaler`. Format conversion (32F→16F) compute pass. Encode after denoiser. Tone-map reads upscaled output.
 - [x] **10.5** ImGui controls: enable toggle, resolution ratio slider (0.25-1.0), internal/output resolution display. Texture reallocation on settings change.
 - [x] **10.6** Resolution info display in ImGui when MetalFX active.
+
+**STOP — wait for user review before starting Phase 11.**
+
+---
+
+## Phase 11: Bloom + Tone Mapping Post-Processing
+_Goal: Replace basic Reinhard with proper HDR post-processing pipeline: bloom extraction, blur, composite, and filmic tone mapping._
+
+### Sub-phase 11A: Tone Mapping Upgrade
+- [x] **11.1** Add tone mapping mode to `RenderOptions.h`: `ToneMapMode` enum (Reinhard, ACES, AgX), `toneMapMode` field. Keep existing `exposureAdjust`.
+- [x] **11.2** Implement ACES filmic tone mapping in `copyFragment` (or new `tonemapFragment`). Use the fitted ACES curve (Stephen Hill's approximation). Add AgX as a neutral-look alternative. Select via `toneMapMode` uniform.
+- [x] **11.3** Wire tone map mode combo in ImGui. Expose exposure slider (already exists). Test: compare Reinhard vs ACES vs AgX on Sponza — ACES should have richer highlights and deeper shadows.
+
+### Sub-phase 11B: Bloom
+- [x] **11.4** Add bloom options to `RenderOptions.h`: `enableBloom` (bool), `bloomThreshold` (float, default 1.0), `bloomIntensity` (float, default 0.05), `bloomRadius` (int, default 6 mip levels).
+- [x] **11.5** Allocate bloom textures in `Renderer.mm`: mip chain (6 levels, each half-resolution of previous), `RGBA16Float` format. Two textures per mip level for ping-pong blur.
+- [x] **11.6** Write `bloomThreshold` compute kernel: extract pixels above `bloomThreshold` luminance from the HDR color buffer (pre-tonemap). Output to mip 0 of bloom chain.
+- [x] **11.7** Write `bloomDownsample` compute kernel: 13-tap tent filter (Karis average for mip 0 to prevent firefly bloom). Progressive downsample through mip chain.
+- [x] **11.8** Write `bloomUpsample` compute kernel: 9-tap tent filter upsampling with additive blend. Progressive upsample from smallest mip back to full resolution.
+- [x] **11.9** Write `bloomComposite` pass: add `bloomResult * bloomIntensity` to HDR color before tone mapping. Can be folded into the tone-map fragment shader.
+- [x] **11.10** Wire bloom controls in ImGui: enable toggle, threshold slider (0.0-5.0), intensity slider (0.0-0.5), debug mode "Bloom Only" to visualize bloom contribution.
+- [x] **11.11** Test: bright emissive surfaces and specular highlights should produce soft glow. Verify no firefly bloom artifacts. Performance: bloom should add <1ms.
+
+**STOP — wait for user review.**
+
+---
+
+## Phase 12: Gamma Correction + HDR Display
+_Goal: Fix sRGB input/output pipeline and enable Extended Dynamic Range._
+
+### Sub-phase 12A: sRGB Texture Input
+- [x] **12.1** Add `sRGB:` parameter to DDSLoader — BC1_sRGB, BC3_sRGB format variants
+- [x] **12.2** Add `sRGB:` parameter to TextureCache — sRGB-aware cache keys, forward to DDSLoader/MTKTextureLoader
+- [x] **12.3** Load baseColor and emissive textures as sRGB, normal and specular as linear, in SceneLoader
+- [x] **12.4** Test: albedo debug view shows brighter/more vivid colors; normals unchanged
+
+### Sub-phase 12B: sRGB Output Encoding
+- [x] **12.5** Add `linearToSRGB()` function to Shaders.metal (piecewise IEC 61966-2-1)
+- [x] **12.6** Apply sRGB OETF in `copyFragment` after tone mapping
+- [x] **12.7** Test: scene brightness correct; ImGui overlay renders correctly
+
+### Sub-phase 12C: HDR / Extended Dynamic Range
+- [x] **12.8** Add `enableHDR`, `hdrHeadroom` to RenderOptions and Uniforms
+- [x] **12.9** Enable `wantsExtendedDynamicRangeContent` on CAMetalLayer, set sRGB colorspace
+- [x] **12.10** Query `maximumExtendedDynamicRangeColorComponentValue` per frame in ViewController
+- [x] **12.11** Implement HDR-aware tone mapping (extended Reinhard with variable white point)
+- [x] **12.12** Wire HDR fields through ToneMapParams struct and Renderer.mm updateUniforms
+- [x] **12.13** Add ImGui HDR controls (enable toggle, headroom display)
+- [x] **12.14** Test: HDR highlights exceed SDR white on EDR displays; SDR fallback works
 
 **STOP — wait for user review.**
 
@@ -194,8 +256,13 @@ _Goal: Render at lower resolution, use MetalFX to upscale to display resolution.
 - [ ] A-trous denoiser toggleable and functional
 - [ ] SVGF denoiser toggleable and functional
 - [ ] Denoiser mode combo: Off / A-Trous / SVGF
-- [ ] ReSTIR DI improves emissive light sampling quality
+- [ ] ReSTIR DI improves emissive light sampling quality (less 1-spp noise)
 - [ ] MetalFX temporal upscaling works at configurable ratios
+- [ ] Bloom extracts bright areas, produces soft glow on emissives/specular
+- [ ] Tone mapping selectable: Reinhard / ACES / AgX
+- [ ] sRGB input: color textures (baseColor, emissive) loaded with sRGB formats
+- [ ] sRGB output: linearToSRGB encoding applied after tone mapping
+- [ ] HDR/EDR: highlights exceed SDR white on EDR displays when enabled
 - [ ] Cornell box fallback still works
 - [ ] `ufbx.h` not included outside `SceneImporter.mm`
 - [ ] `imgui.h` not included outside `ImGuiRenderer.mm`

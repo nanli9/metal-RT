@@ -76,6 +76,15 @@ The implementation of the cross-platform view controller.
 #endif
     _view.colorPixelFormat = MTLPixelFormatRGBA16Float;
 
+    // Enable Extended Dynamic Range for HDR displays
+#if !TARGET_OS_IPHONE
+    if (@available(macOS 10.11, *)) {
+        CAMetalLayer *metalLayer = (CAMetalLayer *)_view.layer;
+        metalLayer.wantsExtendedDynamicRangeContent = YES;
+        metalLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    }
+#endif
+
     NSArray<NSString *> *fbxPaths = [self scenePathsFromArguments];
 
     if (fbxPaths) {
@@ -170,6 +179,20 @@ The implementation of the cross-platform view controller.
             [_renderer resetAccumulation];
     }
 
+    // Query EDR headroom each frame
+    {
+        RenderOptions opts = _renderer.renderOptions;
+#if !TARGET_OS_IPHONE
+        if (@available(macOS 10.11, *)) {
+            NSScreen *screen = view.window.screen;
+            if (screen) {
+                opts.hdrHeadroom = (float)screen.maximumExtendedDynamicRangeColorComponentValue;
+            }
+        }
+#endif
+        _renderer.renderOptions = opts;
+    }
+
     [_renderer drawInMTKView:view];
 
     // ImGui overlay — render FPS after RT passes
@@ -202,14 +225,26 @@ The implementation of the cross-platform view controller.
         if (ImGui::SliderFloat("Emissive", &opts.emissiveIntensity, 0.0f, 20.0f, "%.1f")) rtChanged = true;
         ImGui::SliderFloat("Exposure", &opts.exposureAdjust, -4.0f, 4.0f, "%.1f EV");
 
+        const char *toneMapItems[] = { "Reinhard", "ACES", "AgX" };
+        int toneMapIdx = static_cast<int>(opts.toneMapMode);
+        if (ImGui::Combo("Tone Map", &toneMapIdx, toneMapItems, 3)) {
+            opts.toneMapMode = static_cast<ToneMapMode>(toneMapIdx);
+        }
+
+        ImGui::Checkbox("Bloom", &opts.enableBloom);
+        if (opts.enableBloom) {
+            ImGui::SliderFloat("Bloom Threshold", &opts.bloomThreshold, 0.0f, 5.0f, "%.2f");
+            ImGui::SliderFloat("Bloom Intensity", &opts.bloomIntensity, 0.0f, 0.5f, "%.3f");
+        }
+
         const char *debugItems[] = {
             "Off", "Primitive ID", "Material ID", "Barycentrics",
             "Base Color", "Normals", "NdotL", "Shadow", "Instance ID",
             "Lambert", "UV coords", "BaseTex@UV", "AO value", "BaseTexIdx",
             "GBuf Depth", "GBuf Normal", "GBuf Albedo", "Denoise Weight",
-            "Motion Vectors", "SVGF Variance"
+            "Motion Vectors", "SVGF Variance", "Bloom Only"
         };
-        if (ImGui::Combo("Debug View", &opts.debugMode, debugItems, 20)) rtChanged = true;
+        if (ImGui::Combo("Debug View", &opts.debugMode, debugItems, 21)) rtChanged = true;
 
         const char *denoiserItems[] = { "Off", "A-Trous", "SVGF" };
         int denoiserIdx = static_cast<int>(opts.denoiserMode);
@@ -248,6 +283,19 @@ The implementation of the cross-platform view controller.
             bool disabled = false;
             ImGui::Checkbox("MetalFX (not supported)", &disabled);
             ImGui::EndDisabled();
+        }
+
+        ImGui::Separator();
+        ImGui::Text("HDR Display");
+        if (opts.hdrHeadroom > 1.0f) {
+            ImGui::Checkbox("Enable HDR", &opts.enableHDR);
+            ImGui::Text("Headroom: %.2fx", opts.hdrHeadroom);
+        } else {
+            ImGui::BeginDisabled(true);
+            bool disabled = false;
+            ImGui::Checkbox("HDR (display not HDR)", &disabled);
+            ImGui::EndDisabled();
+            ImGui::Text("Headroom: 1.00x (SDR)");
         }
 
         _renderer.renderOptions = opts;

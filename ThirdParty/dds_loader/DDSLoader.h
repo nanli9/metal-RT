@@ -15,6 +15,13 @@ NS_ASSUME_NONNULL_BEGIN
                                         device:(id<MTLDevice>)device
                                          error:(NSError *_Nullable *_Nullable)error;
 
+/// Load a DDS file with explicit sRGB control.
+/// When sRGB is YES, BC1/BC3 textures use sRGB pixel formats (hardware auto-linearizes on sample).
++ (nullable id<MTLTexture>)loadTextureFromPath:(NSString *)path
+                                        device:(id<MTLDevice>)device
+                                          sRGB:(BOOL)sRGB
+                                         error:(NSError *_Nullable *_Nullable)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

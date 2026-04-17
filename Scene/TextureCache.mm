@@ -27,10 +27,15 @@
 - (NSUInteger)failedCount { return _failedCount; }
 
 - (TextureAsset *)textureAtPath:(NSString *)path {
+    return [self textureAtPath:path sRGB:NO];
+}
+
+- (TextureAsset *)textureAtPath:(NSString *)path sRGB:(BOOL)sRGB {
     if (!path || path.length == 0) return nil;
 
-    // Check cache
-    TextureAsset *cached = _cache[path];
+    // Cache key includes sRGB flag to avoid returning wrong format
+    NSString *cacheKey = sRGB ? [path stringByAppendingString:@"#sRGB"] : path;
+    TextureAsset *cached = _cache[cacheKey];
     if (cached) return cached;
 
     id<MTLTexture> texture = nil;
@@ -38,7 +43,7 @@
 
     if ([ext isEqualToString:@"dds"]) {
         NSError *error = nil;
-        texture = [DDSLoader loadTextureFromPath:path device:_device error:&error];
+        texture = [DDSLoader loadTextureFromPath:path device:_device sRGB:sRGB error:&error];
         if (!texture) {
             NSLog(@"TextureCache: failed to load DDS %@: %@", path.lastPathComponent, error.localizedDescription);
             _failedCount++;
@@ -47,7 +52,7 @@
     } else if ([ext isEqualToString:@"tga"] || [ext isEqualToString:@"png"] || [ext isEqualToString:@"jpg"]) {
         NSURL *url = [NSURL fileURLWithPath:path];
         NSDictionary *opts = @{
-            MTKTextureLoaderOptionSRGB: @NO,
+            MTKTextureLoaderOptionSRGB: @(sRGB),
             MTKTextureLoaderOptionTextureStorageMode: @(MTLStorageModeShared),
             MTKTextureLoaderOptionTextureUsage: @(MTLTextureUsageShaderRead),
         };
@@ -66,7 +71,7 @@
 
     texture.label = path.lastPathComponent;
     TextureAsset *asset = [[TextureAsset alloc] initWithTexture:texture sourcePath:path];
-    _cache[path] = asset;
+    _cache[cacheKey] = asset;
     _loadedCount++;
     return asset;
 }

@@ -961,21 +961,154 @@ vertex CopyVertexOut copyVertex(unsigned short vid [[vertex_id]]) {
     return out;
 }
 
-// Simple fragment shader that copies a texture and applies a simple tonemapping function.
+// ---- Tone Mapping Functions ----
+
+// sRGB OETF: linear → sRGB encoding (IEC 61966-2-1 piecewise)
+float3 linearToSRGB(float3 linear) {
+    float3 low  = linear * 12.92f;
+    float3 high = 1.055f * pow(max(linear, 1e-6f), 1.0f / 2.4f) - 0.055f;
+    return select(high, low, linear <= 0.0031308f);
+}
+
+// Reinhard tone mapping
+float3 tonemapReinhard(float3 color) {
+    return color / (1.0f + color);
+}
+
+// ACES filmic tone mapping (Stephen Hill's fit)
+float3 tonemapACES(float3 color) {
+    // sRGB => ACES input transform (approximate)
+    float3x3 inputMat = float3x3(
+        float3(0.59719f, 0.07600f, 0.02840f),
+        float3(0.35458f, 0.90834f, 0.13383f),
+        float3(0.04823f, 0.01566f, 0.83777f)
+    );
+    // ACES output transform => sRGB (approximate)
+    float3x3 outputMat = float3x3(
+        float3( 1.60475f, -0.10208f, -0.00327f),
+        float3(-0.53108f,  1.10813f, -0.07276f),
+        float3(-0.07367f, -0.00605f,  1.07602f)
+    );
+
+    color = inputMat * color;
+
+    // RRT and ODT fit
+    float3 a = color * (color + 0.0245786f) - 0.000090537f;
+    float3 b = color * (0.983729f * color + 0.4329510f) + 0.238081f;
+    color = a / b;
+
+    color = outputMat * color;
+    return saturate(color);
+}
+
+// AgX tone mapping (Troy Sobotka's AgX, minimal fit)
+float3 tonemapAgX(float3 color) {
+    // AgX log encoding
+    float3x3 agxTransform = float3x3(
+        float3(0.842479f, 0.042418f, 0.042416f),
+        float3(0.078435f, 0.878517f, 0.078435f),
+        float3(0.079086f, 0.079065f, 0.879149f)
+    );
+
+    color = agxTransform * color;
+    color = max(color, 1e-10f);
+
+    // Log2 encoding, clamped to [−12.47393, 4.026069] range
+    color = log2(color);
+
+    float minEV = -12.47393f;
+    float maxEV = 4.026069f;
+    color = (color - minEV) / (maxEV - minEV);
+    color = saturate(color);
+
+    // 6th order polynomial approximation of the AgX sigmoid
+    float3 x2 = color * color;
+    float3 x4 = x2 * x2;
+    color = + 15.5f     * x4 * x2
+            - 40.14f    * x4 * color
+            + 31.96f    * x4
+            - 6.868f    * x2 * color
+            + 0.4298f   * x2
+            + 0.1191f   * color
+            - 0.00232f;
+
+    return saturate(color);
+}
+
+// Fragment shader that copies a texture and applies tone mapping + bloom composite.
+struct ToneMapParams {
+    float exposureAdjust;
+    uint toneMapMode; // 0=Reinhard, 1=ACES, 2=AgX
+    float bloomIntensity;
+    uint enableBloom;
+    uint enableHDR;
+    float hdrHeadroom;
+};
+
+// HDR-aware tone mapping: maps to [0, headroom] instead of [0, 1]
+// Uses SDR tone mapper for color ratios, then scales luminance into EDR range
+float3 tonemapHDR(float3 color, uint mode, float headroom) {
+    // SDR tone map for color ratios
+    float3 sdrResult;
+    if (mode == 1) {
+        sdrResult = tonemapACES(color);
+    } else if (mode == 2) {
+        sdrResult = tonemapAgX(color);
+    } else {
+        sdrResult = tonemapReinhard(color);
+    }
+
+    // Compute luminance before and after SDR tone mapping
+    float lumIn  = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    float lumSDR = dot(sdrResult, float3(0.2126f, 0.7152f, 0.0722f));
+
+    // Extended Reinhard with variable white point: maps [0,inf) → [0, headroom]
+    float Lw = headroom;
+    float lumHDR = lumIn * (1.0f + lumIn / (Lw * Lw)) / (1.0f + lumIn);
+
+    // Scale SDR color ratios to HDR luminance
+    float scale = (lumSDR > 1e-6f) ? (lumHDR / lumSDR) : 1.0f;
+    return min(sdrResult * scale, headroom);
+}
+
 fragment float4 copyFragment(CopyVertexOut in [[stage_in]],
-                             texture2d<float> tex,
-                             constant float &exposureAdjust [[buffer(0)]])
+                             texture2d<float> tex [[texture(0)]],
+                             texture2d<float> bloomTex [[texture(1)]],
+                             constant ToneMapParams &params [[buffer(0)]])
 {
     constexpr sampler sam(min_filter::nearest, mag_filter::nearest, mip_filter::none);
+    constexpr sampler linearSam(min_filter::linear, mag_filter::linear, mip_filter::none);
 
     float3 color = tex.sample(sam, in.uv).xyz;
 
-    // Apply exposure adjustment (in EV stops)
-    color *= exp2(exposureAdjust);
+    // Composite bloom before tone mapping (additive in HDR space)
+    if (params.enableBloom) {
+        float3 bloom = bloomTex.sample(linearSam, in.uv).xyz;
+        color += bloom * params.bloomIntensity;
+    }
 
-    // Apply a simple tonemapping function to reduce the dynamic range of the
-    // input image into a range which the screen can display.
-    color = color / (1.0f + color);
+    // Apply exposure adjustment (in EV stops)
+    color *= exp2(params.exposureAdjust);
+
+    // Tone map
+    if (params.enableHDR && params.hdrHeadroom > 1.0f) {
+        // HDR path: map to [0, headroom], preserving EDR highlights
+        color = tonemapHDR(color, params.toneMapMode, params.hdrHeadroom);
+    } else {
+        // SDR path: map to [0, 1]
+        if (params.toneMapMode == 1) {
+            color = tonemapACES(color);
+        } else if (params.toneMapMode == 2) {
+            color = tonemapAgX(color);
+        } else {
+            color = tonemapReinhard(color);
+        }
+    }
+
+    // Apply sRGB OETF for correct display output
+    // (drawable is RGBA16Float with no automatic encoding;
+    //  for HDR, values > 1.0 in sRGB-encoded space are EDR content)
+    color = linearToSRGB(color);
 
     return float4(color, 1.0f);
 }
@@ -1376,4 +1509,135 @@ kernel void formatConvert32to16(
 {
     if (tid.x >= src.get_width() || tid.y >= src.get_height()) return;
     dst.write(src.read(tid), tid);
+}
+
+// ---- Bloom Post-Processing ----
+
+// Luminance helper
+inline float bloomLuminance(float3 c) {
+    return dot(c, float3(0.2126f, 0.7152f, 0.0722f));
+}
+
+// Bloom threshold extraction: extract pixels above threshold, with soft knee
+// Uses Karis average for mip 0 to prevent firefly bloom artifacts
+kernel void bloomThreshold(
+    uint2                            tid    [[thread_position_in_grid]],
+    texture2d<float>                 src    [[texture(0)]],
+    texture2d<float, access::write>  dst    [[texture(1)]],
+    constant BloomParams            &params [[buffer(0)]]
+)
+{
+    if (tid.x >= params.dstWidth || tid.y >= params.dstHeight) return;
+
+    // Bilinear fetch: each output pixel covers a 2x2 region of the source
+    float2 srcSize = float2(params.srcWidth, params.srcHeight);
+    float2 texel = (float2(tid) + 0.5f) * 2.0f; // center of the 2x2 block
+
+    // 4-tap box filter with Karis average (weight by 1/(1+luma) to suppress fireflies)
+    float3 sum = float3(0);
+    float  wSum = 0;
+    for (int dy = 0; dy <= 1; dy++) {
+        for (int dx = 0; dx <= 1; dx++) {
+            int2 coord = int2(texel) + int2(dx, dy) - int2(1, 1);
+            coord = clamp(coord, int2(0), int2(srcSize) - 1);
+            float3 s = src.read(uint2(coord)).xyz;
+            float w = 1.0f / (1.0f + bloomLuminance(s));
+            sum += s * w;
+            wSum += w;
+        }
+    }
+    float3 color = sum / wSum;
+
+    // Soft threshold: smooth transition around threshold
+    float luma = bloomLuminance(color);
+    float knee = params.threshold * 0.5f; // soft knee width
+    float soft = luma - params.threshold + knee;
+    soft = clamp(soft, 0.0f, 2.0f * knee);
+    soft = soft * soft / (4.0f * knee + 1e-5f);
+    float contribution = max(soft, luma - params.threshold) / max(luma, 1e-5f);
+    contribution = max(contribution, 0.0f);
+
+    dst.write(float4(color * contribution, 1.0f), tid);
+}
+
+// Bloom downsample: 13-tap tent filter for high quality downsampling
+// Based on Call of Duty: Advanced Warfare presentation (Jorge Jimenez)
+kernel void bloomDownsample(
+    uint2                            tid    [[thread_position_in_grid]],
+    texture2d<float>                 src    [[texture(0)]],
+    texture2d<float, access::write>  dst    [[texture(1)]],
+    constant BloomParams            &params [[buffer(0)]]
+)
+{
+    if (tid.x >= params.dstWidth || tid.y >= params.dstHeight) return;
+
+    float2 srcSize = float2(params.srcWidth, params.srcHeight);
+    // Map dst pixel center to src UV
+    float2 uv = (float2(tid) + 0.5f) / float2(params.dstWidth, params.dstHeight);
+
+    // 13-tap filter: sample pattern for high quality downsample
+    //   a - b - c
+    //   - j - k -
+    //   d - e - f
+    //   - l - m -
+    //   g - h - i
+    float3 a = src.read(uint2(clamp(int2(uv * srcSize + float2(-1, -1)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 b = src.read(uint2(clamp(int2(uv * srcSize + float2( 0, -1)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 c = src.read(uint2(clamp(int2(uv * srcSize + float2( 1, -1)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 d = src.read(uint2(clamp(int2(uv * srcSize + float2(-1,  0)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 e = src.read(uint2(clamp(int2(uv * srcSize + float2( 0,  0)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 f = src.read(uint2(clamp(int2(uv * srcSize + float2( 1,  0)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 g = src.read(uint2(clamp(int2(uv * srcSize + float2(-1,  1)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 h = src.read(uint2(clamp(int2(uv * srcSize + float2( 0,  1)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 i = src.read(uint2(clamp(int2(uv * srcSize + float2( 1,  1)), int2(0), int2(srcSize) - 1))).xyz;
+
+    // Diagonal samples (between the main samples)
+    float3 j = src.read(uint2(clamp(int2(uv * srcSize + float2(-0.5f, -0.5f)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 k = src.read(uint2(clamp(int2(uv * srcSize + float2( 0.5f, -0.5f)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 l = src.read(uint2(clamp(int2(uv * srcSize + float2(-0.5f,  0.5f)), int2(0), int2(srcSize) - 1))).xyz;
+    float3 m = src.read(uint2(clamp(int2(uv * srcSize + float2( 0.5f,  0.5f)), int2(0), int2(srcSize) - 1))).xyz;
+
+    // Weighted sum (13-tap tent)
+    float3 color = e * 0.125f;                             // center: 1/8
+    color += (b + d + f + h) * 0.0625f;                   // cross:  4 * 1/16
+    color += (a + c + g + i) * 0.03125f;                  // corners: 4 * 1/32
+    color += (j + k + l + m) * 0.125f;                    // inner: 4 * 1/8
+
+    dst.write(float4(color, 1.0f), tid);
+}
+
+// Bloom upsample: 9-tap tent filter with additive blend
+kernel void bloomUpsample(
+    uint2                            tid    [[thread_position_in_grid]],
+    texture2d<float>                 src    [[texture(0)]],   // smaller mip (to upsample)
+    texture2d<float>                 dst_prev [[texture(1)]], // current mip from downsample (to blend with)
+    texture2d<float, access::write>  dst    [[texture(2)]],
+    constant BloomParams            &params [[buffer(0)]]
+)
+{
+    if (tid.x >= params.dstWidth || tid.y >= params.dstHeight) return;
+
+    float2 srcSize = float2(params.srcWidth, params.srcHeight);
+    // Map dst pixel to src UV
+    float2 uv = (float2(tid) + 0.5f) / float2(params.dstWidth, params.dstHeight);
+    float2 srcCoord = uv * srcSize;
+
+    // 9-tap tent filter (3x3 with bilinear-friendly weights)
+    float3 sum = float3(0);
+    sum += src.read(uint2(clamp(int2(srcCoord + float2(-1, -1)), int2(0), int2(srcSize) - 1))).xyz * 1.0f;
+    sum += src.read(uint2(clamp(int2(srcCoord + float2( 0, -1)), int2(0), int2(srcSize) - 1))).xyz * 2.0f;
+    sum += src.read(uint2(clamp(int2(srcCoord + float2( 1, -1)), int2(0), int2(srcSize) - 1))).xyz * 1.0f;
+    sum += src.read(uint2(clamp(int2(srcCoord + float2(-1,  0)), int2(0), int2(srcSize) - 1))).xyz * 2.0f;
+    sum += src.read(uint2(clamp(int2(srcCoord + float2( 0,  0)), int2(0), int2(srcSize) - 1))).xyz * 4.0f;
+    sum += src.read(uint2(clamp(int2(srcCoord + float2( 1,  0)), int2(0), int2(srcSize) - 1))).xyz * 2.0f;
+    sum += src.read(uint2(clamp(int2(srcCoord + float2(-1,  1)), int2(0), int2(srcSize) - 1))).xyz * 1.0f;
+    sum += src.read(uint2(clamp(int2(srcCoord + float2( 0,  1)), int2(0), int2(srcSize) - 1))).xyz * 2.0f;
+    sum += src.read(uint2(clamp(int2(srcCoord + float2( 1,  1)), int2(0), int2(srcSize) - 1))).xyz * 1.0f;
+    sum /= 16.0f;
+
+    // Additive blend with the downsample result at this mip level
+    float3 current = dst_prev.read(tid).xyz;
+    float3 color = current + sum;
+
+    dst.write(float4(color, 1.0f), tid);
 }

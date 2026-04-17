@@ -8,6 +8,14 @@ enum class DenoiserMode : int
     SVGF   = 2
 };
 
+/// Tone mapping mode selection
+enum class ToneMapMode : int
+{
+    Reinhard = 0,
+    ACES     = 1,
+    AgX      = 2
+};
+
 /// Centralized render settings structure.
 /// This is the single source of truth for all GUI-controlled runtime features.
 /// The GUI reads and writes this struct; the renderer copies relevant fields
@@ -23,6 +31,7 @@ struct RenderOptions
     int  debugMode          = 0;
     float emissiveIntensity = 5.0f;
     float exposureAdjust    = 0.0f;   // EV stops, applied in tonemapping
+    ToneMapMode toneMapMode = ToneMapMode::ACES;
 
     // A-trous / SVGF denoiser tuning
     int   atrousIterations    = 5;      // number of filter passes (1-5)
@@ -31,6 +40,16 @@ struct RenderOptions
     float denoiseSigmaDepth   = 1.0f;   // depth edge-stopping strength
     float svgfAlphaColor      = 0.05f;  // SVGF temporal blend alpha floor (0.01-0.5)
     float svgfHistoryMax      = 32.0f;  // SVGF max history length (4-256)
+
+    // Bloom
+    bool  enableBloom       = true;
+    float bloomThreshold    = 1.0f;   // luminance threshold for bloom extraction
+    float bloomIntensity    = 0.05f;  // strength of bloom composite
+    int   bloomMipLevels    = 6;      // number of mip levels in bloom chain
+
+    // HDR Display
+    bool  enableHDR     = false;  // enable Extended Dynamic Range output
+    float hdrHeadroom   = 1.0f;   // current display headroom (1.0 = SDR, queried per frame)
 
     // MetalFX Temporal Upscaling
     bool  enableMetalFXUpscaling = false;
